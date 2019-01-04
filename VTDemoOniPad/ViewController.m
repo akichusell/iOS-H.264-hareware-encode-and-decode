@@ -522,7 +522,6 @@ static void didDecompress( void *decompressionOutputRefCon, void *sourceFrameRef
 - (void)gotEncodedData:(NSData*)data isKeyFrame:(BOOL)isKeyFrame
 {
 //    NSLog(@"gotEncodedData %d", (int)data.length);
-    
 #if DIRECT_DECODE
     if (isKeyFrame) {
         if (![self initH264DecoderWithSps:h264Encoder.sps

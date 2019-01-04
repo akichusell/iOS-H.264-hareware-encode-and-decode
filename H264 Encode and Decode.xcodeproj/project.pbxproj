@@ -322,6 +322,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				DEVELOPMENT_TEAM = QFQ6ANN8VH;
+				GCC_PREFIX_HEADER = "$(PROJECT_DIR)/VTDemoOniPad/PrefixHeader.pch";
 				INFOPLIST_FILE = VTDemoOniPad/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 11.0;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
@@ -335,6 +336,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				DEVELOPMENT_TEAM = QFQ6ANN8VH;
+				GCC_PREFIX_HEADER = "$(PROJECT_DIR)/VTDemoOniPad/PrefixHeader.pch";
 				INFOPLIST_FILE = VTDemoOniPad/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 11.0;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";

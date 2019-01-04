@@ -35,7 +35,6 @@
     _ppsSize = 0;
 }
 
-// VTCompressionOutputCallback（回调方法）  由VTCompressionSessionCreate调用
 void didCompressH264(void *outputCallbackRefCon, void *sourceFrameRefCon, OSStatus status, VTEncodeInfoFlags infoFlags, CMSampleBufferRef sampleBuffer)
 {
 //    NSLog(@"didCompressH264 called with status %d infoFlags %d", (int)status, (int)infoFlags);
@@ -50,7 +49,6 @@ void didCompressH264(void *outputCallbackRefCon, void *sourceFrameRefCon, OSStat
    
     // Check if we have got a key frame first
     bool keyframe = !CFDictionaryContainsKey( (CFArrayGetValueAtIndex(CMSampleBufferGetSampleAttachmentsArray(sampleBuffer, true), 0)), kCMSampleAttachmentKey_NotSync);
-    
     if (keyframe) {
         CMFormatDescriptionRef format = CMSampleBufferGetFormatDescription(sampleBuffer);
         // CFDictionaryRef extensionDict = CMFormatDescriptionGetExtensions(format);
