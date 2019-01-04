@@ -16,7 +16,7 @@
 
 @end
 
-@interface H264HwEncoderImpl : NSObject 
+@interface VTHwEncoderImpl : NSObject 
 
 - (void) initWithConfiguration;
 - (void) initEncode:(int)width  height:(int)height;

@@ -17,7 +17,7 @@
 @interface ViewController ()
 {
     // 인코딩
-    H264HwEncoderImpl *h264Encoder;
+    VTHwEncoderImpl *vtEncoder;
     AVCaptureSession *captureSession;
     bool startCalled;
     AVCaptureVideoPreviewLayer *previewLayer;
@@ -69,8 +69,8 @@ static void didDecompress( void *decompressionOutputRefCon, void *sourceFrameRef
 - (void)viewDidLoad {
     [super viewDidLoad];
     // Do any additional setup after loading the view, typically from a nib.
-    h264Encoder = [H264HwEncoderImpl alloc];
-    [h264Encoder initWithConfiguration];
+    vtEncoder = [VTHwEncoderImpl alloc];
+    [vtEncoder initWithConfiguration];
     startCalled = true;
     playCalled = true;
 #if DIRECT_DECODE
@@ -389,7 +389,7 @@ static void didDecompress( void *decompressionOutputRefCon, void *sourceFrameRef
         [_startStopBtn setTitle:@"Start" forState:UIControlStateNormal];
         startCalled = true;
         [self stopCamera];
-        [h264Encoder End];
+        [vtEncoder End];
     }
 }
 
@@ -457,8 +457,8 @@ static void didDecompress( void *decompressionOutputRefCon, void *sourceFrameRef
     fileHandle = [NSFileHandle fileHandleForWritingAtPath:h264FileSavePath];
 #endif
     
-    [h264Encoder initEncode:720 height:1280];
-    h264Encoder.delegate = self;
+    [vtEncoder initEncode:720 height:1280];
+    vtEncoder.delegate = self;
 }
 
 - (void) statusBarOrientationDidChange:(NSNotification*)notification {
@@ -506,7 +506,7 @@ static void didDecompress( void *decompressionOutputRefCon, void *sourceFrameRef
 -(void) captureOutput:(AVCaptureOutput*)captureOutput didOutputSampleBuffer:(CMSampleBufferRef)sampleBuffer fromConnection:(AVCaptureConnection*)connection {
     [sbDisplayLayer enqueueSampleBuffer:sampleBuffer];
     
-    [h264Encoder encode:sampleBuffer];
+    [vtEncoder encode:sampleBuffer];
 }
 
 #pragma mark - H264HwEncoderImplDelegate delegate
@@ -532,10 +532,10 @@ static void didDecompress( void *decompressionOutputRefCon, void *sourceFrameRef
 //    NSLog(@"gotEncodedData %d", (int)data.length);
 #if DIRECT_DECODE
     if (isKeyFrame) {
-        if (![self initH264DecoderWithSps:h264Encoder.sps
-                                  spsSize:h264Encoder.spsSize
-                                      pps:h264Encoder.pps
-                                  ppsSize:h264Encoder.ppsSize])
+        if (![self initH264DecoderWithSps:vtEncoder.sps
+                                  spsSize:vtEncoder.spsSize
+                                      pps:vtEncoder.pps
+                                  ppsSize:vtEncoder.ppsSize])
         {
             NSLog(@"initH264Decoder failed");
             return;

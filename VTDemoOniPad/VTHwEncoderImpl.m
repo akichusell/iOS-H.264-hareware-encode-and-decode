@@ -1,6 +1,6 @@
 //
-//  H264HwEncoderImpl.m
-//  h264v1
+//  VTHwEncoderImpl.m
+//
 //
 //  Created by Ganvir, Manish on 3/31/15.
 //  Copyright (c) 2015 Ganvir, Manish. All rights reserved.
@@ -11,7 +11,7 @@
 @import VideoToolbox;
 @import AVFoundation;
 
-@implementation H264HwEncoderImpl
+@implementation VTHwEncoderImpl
 {
     VTCompressionSessionRef EncodingSession;
     dispatch_queue_t aQueue;
@@ -35,17 +35,17 @@
     _ppsSize = 0;
 }
 
-void didCompressH264(void *outputCallbackRefCon, void *sourceFrameRefCon, OSStatus status, VTEncodeInfoFlags infoFlags, CMSampleBufferRef sampleBuffer)
+void didCompressCallback(void *outputCallbackRefCon, void *sourceFrameRefCon, OSStatus status, VTEncodeInfoFlags infoFlags, CMSampleBufferRef sampleBuffer)
 {
-//    NSLog(@"didCompressH264 called with status %d infoFlags %d", (int)status, (int)infoFlags);
+//    NSLog(@"didCompressCallback called with status %d infoFlags %d", (int)status, (int)infoFlags);
     if (status != 0) return;
     
     if (!CMSampleBufferDataIsReady(sampleBuffer))
     {
-        NSLog(@"didCompressH264 data is not ready ");
+        NSLog(@"didCompressCallback data is not ready ");
         return;
     }
-    H264HwEncoderImpl* encoder = (__bridge H264HwEncoderImpl*)outputCallbackRefCon;
+    VTHwEncoderImpl* encoder = (__bridge VTHwEncoderImpl*)outputCallbackRefCon;
    
     // Check if we have got a key frame first
     bool keyframe = !CFDictionaryContainsKey( (CFArrayGetValueAtIndex(CMSampleBufferGetSampleAttachmentsArray(sampleBuffer, true), 0)), kCMSampleAttachmentKey_NotSync);
@@ -132,12 +132,11 @@ void didCompressH264(void *outputCallbackRefCon, void *sourceFrameRefCon, OSStat
 #else
     CMVideoCodecType type = kCMVideoCodecType_H264;
 #endif
-    OSStatus status = VTCompressionSessionCreate(NULL, width, height, type, sessionAttributes, NULL, NULL, didCompressH264, (__bridge void *)(self),  &EncodingSession);
-    NSLog(@"H264: VTCompressionSessionCreate %d", (int)status);
+    OSStatus status = VTCompressionSessionCreate(NULL, width, height, type, sessionAttributes, NULL, NULL, didCompressCallback, (__bridge void *)(self),  &EncodingSession);
+    NSLog(@"VTCompressionSessionCreate %d", (int)status);
     if (status != 0)
     {
-        NSLog(@"H264: Unable to create a H264 session");
-        error = @"H264: Unable to create a H264 session";
+        NSLog(@"Unable to create (%@) session", @(type));
         return ;
     }
     
@@ -221,8 +220,7 @@ void didCompressH264(void *outputCallbackRefCon, void *sourceFrameRefCon, OSStat
                                                           NULL, NULL, &flags);
     // Check for error
     if (statusCode != noErr) {
-        NSLog(@"H264: VTCompressionSessionEncodeFrame failed with %d", (int)statusCode);
-        error = @"H264: VTCompressionSessionEncodeFrame failed ";
+        NSLog(@"VTCompressionSessionEncodeFrame failed with %d", (int)statusCode);
         
         // End the session
         VTCompressionSessionInvalidate(EncodingSession);
@@ -231,7 +229,7 @@ void didCompressH264(void *outputCallbackRefCon, void *sourceFrameRefCon, OSStat
         error = NULL;
         return;
     }
-//    NSLog(@"H264: VTCompressionSessionEncodeFrame Success");
+//    NSLog(@"VTCompressionSessionEncodeFrame Success");
 }
 
 - (void) End {
