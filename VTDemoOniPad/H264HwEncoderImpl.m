@@ -55,7 +55,6 @@ void didCompressH264(void *outputCallbackRefCon, void *sourceFrameRefCon, OSStat
         // Get the extensions
         // From the extensions get the dictionary with key "SampleDescriptionExtensionAtoms"
         // From the dict, get the value for the key "avcC"
-       
         size_t sparameterSetSize, sparameterSetCount;
         const uint8_t *sparameterSet;
         OSStatus statusCode = CMVideoFormatDescriptionGetH264ParameterSetAtIndex(format, 0, &sparameterSet, &sparameterSetSize, &sparameterSetCount, 0 );
@@ -81,37 +80,6 @@ void didCompressH264(void *outputCallbackRefCon, void *sourceFrameRefCon, OSStat
     }
     
 #if SAMPLEBUFFER_DECODE
-    CMSampleBufferRef newSamplebuffer;
-    OSStatus statusValue = CMSampleBufferCreateCopy(kCFAllocatorDefault, sampleBuffer, &newSamplebuffer);
-    if (noErr != statusValue) {
-        NSLog(@"");
-    }
-    
-    CMBlockBufferRef dataBuffer = CMSampleBufferGetDataBuffer(sampleBuffer);
-    
-    size_t length, totalLength;
-    char *dataPointer;
-    OSStatus statusCodeRet = CMBlockBufferGetDataPointer(dataBuffer, 0, &length, &totalLength, &dataPointer);
-    
-    uint8_t *data = malloc(totalLength);
-    CMBlockBufferCopyDataBytes(dataBuffer, 0, totalLength, data);
-    
-    
-    
-    
-    status = CMBlockBufferCreateWithMemoryBlock(
-                                                kCFAllocatorDefault,
-                                                samples,
-                                                dataBuffer,
-                                                kCFAllocatorNull,
-                                                NULL,
-                                                0,
-                                                buflen,
-                                                0,
-                                                &tmp_bbuf);
-    
-    
-    
     if (encoder.delegate) {
         [encoder.delegate gotEncodedSamplebuffer:sampleBuffer isKeyFrame:keyframe];
     }
@@ -121,23 +89,28 @@ void didCompressH264(void *outputCallbackRefCon, void *sourceFrameRefCon, OSStat
     char *dataPointer;
     OSStatus statusCodeRet = CMBlockBufferGetDataPointer(dataBuffer, 0, &length, &totalLength, &dataPointer);
     if (statusCodeRet == noErr) {
+#if SPLIT_NALUNIT
         size_t bufferOffset = 0;
         static const int AVCCHeaderLength = 4;
         while (bufferOffset < totalLength - AVCCHeaderLength) {
-            
+
             // Read the NAL unit length
             uint32_t NALUnitLength = 0;
             memcpy(&NALUnitLength, dataPointer + bufferOffset, AVCCHeaderLength);
-            
+
             // Convert the length value from Big-endian to Little-endian
             NALUnitLength = CFSwapInt32BigToHost(NALUnitLength);
-            
+
             NSData* data = [[NSData alloc] initWithBytes:(dataPointer + bufferOffset + AVCCHeaderLength) length:NALUnitLength];
             [encoder.delegate gotEncodedData:data isKeyFrame:keyframe];
-            
+
             // Move to the next NAL unit in the block buffer
             bufferOffset += AVCCHeaderLength + NALUnitLength;
         }
+#else
+        NSData* data = [[NSData alloc] initWithBytes:dataPointer length:totalLength];
+        [encoder.delegate gotEncodedData:data isKeyFrame:keyframe];
+#endif
     }
 #endif
 }
@@ -155,10 +128,11 @@ void didCompressH264(void *outputCallbackRefCon, void *sourceFrameRefCon, OSStat
                                                                          &kCFTypeDictionaryKeyCallBacks,
                                                                          &kCFTypeDictionaryValueCallBacks);
 #if USE_HEVC
-    OSStatus status = VTCompressionSessionCreate(NULL, width, height, kCMVideoCodecType_HEVC, sessionAttributes, NULL, NULL, didCompressH264, (__bridge void *)(self),  &EncodingSession);
+    CMVideoCodecType type = kCMVideoCodecType_HEVC;
 #else
-    OSStatus status = VTCompressionSessionCreate(NULL, width, height, kCMVideoCodecType_H264, sessionAttributes, NULL, NULL, didCompressH264, (__bridge void *)(self),  &EncodingSession);
+    CMVideoCodecType type = kCMVideoCodecType_H264;
 #endif
+    OSStatus status = VTCompressionSessionCreate(NULL, width, height, type, sessionAttributes, NULL, NULL, didCompressH264, (__bridge void *)(self),  &EncodingSession);
     NSLog(@"H264: VTCompressionSessionCreate %d", (int)status);
     if (status != 0)
     {

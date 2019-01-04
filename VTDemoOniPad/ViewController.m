@@ -12,6 +12,8 @@
 #import "AAPLEAGLLayer.h"
 #import <VideoToolbox/VideoToolbox.h>
 
+#define WIDTH_RATIO 0.85f
+
 @interface ViewController ()
 {
     // 인코딩
@@ -356,7 +358,9 @@ static void didDecompress( void *decompressionOutputRefCon, void *sourceFrameRef
         playCalled = false;
         [_playerBtn setTitle:@"close" forState:UIControlStateNormal];
 
-        _glLayer = [[AAPLEAGLLayer alloc] initWithFrame:CGRectMake(0, 20, self.view.frame.size.width, (self.view.frame.size.width * 16)/9)] ;
+        float width = self.view.frame.size.width * WIDTH_RATIO;
+        float height = width * 16.f/9.f;
+        _glLayer = [[AAPLEAGLLayer alloc] initWithFrame:CGRectMake((self.view.frame.size.width-width)/2, 20, width, height)];
         [self.view.layer addSublayer:_glLayer];
         
         dispatch_async(dispatch_get_global_queue(0, 0), ^{
@@ -435,7 +439,9 @@ static void didDecompress( void *decompressionOutputRefCon, void *sourceFrameRef
     
 #if DIRECT_DECODE
     // decoded display
-    _glLayer = [[AAPLEAGLLayer alloc] initWithFrame:CGRectMake(0, 20, self.view.frame.size.width, (self.view.frame.size.width * 16)/9)] ;
+    float width = self.view.frame.size.width * WIDTH_RATIO;
+    float height = width * 16.f/9.f;
+    _glLayer = [[AAPLEAGLLayer alloc] initWithFrame:CGRectMake((self.view.frame.size.width-width)/2, 20, width, height)];
     [self.view.layer addSublayer:_glLayer];
 #else
     // preview display
@@ -443,7 +449,9 @@ static void didDecompress( void *decompressionOutputRefCon, void *sourceFrameRef
     sb.backgroundColor = [UIColor blackColor].CGColor;
     sbDisplayLayer = sb;
     sb.videoGravity = AVLayerVideoGravityResizeAspect;
-    sbDisplayLayer.frame = CGRectMake(0, 20, self.view.frame.size.width, (self.view.frame.size.width * 16)/9);
+    float width = self.view.frame.size.width * WIDTH_RATIO;
+    float height = width * 16.f/9.f;
+    sbDisplayLayer.frame = CGRectMake((self.view.frame.size.width-width)/2, 20, width, height);
     [self.view.layer addSublayer:sbDisplayLayer];
     
     fileHandle = [NSFileHandle fileHandleForWritingAtPath:h264FileSavePath];
@@ -534,18 +542,19 @@ static void didDecompress( void *decompressionOutputRefCon, void *sourceFrameRef
         }
     }
     
-    // create vp
-    VideoPacket *vp = [[VideoPacket alloc] initWithSize:(data.length + 4)];
-    const uint8_t KStartCode[4] = {0, 0, 0, 1};
-    memcpy(vp.buffer, KStartCode, 4);
-    memcpy(vp.buffer + 4, data.bytes, data.length);
+#if SPLIT_NALUNIT
+    const int startHeaderSize = 4;
+    VideoPacket *vp = [[VideoPacket alloc] initWithSize:(data.length + startHeaderSize)];
+    const uint8_t KStartCode[startHeaderSize] = {0, 0, 0, 1};
+    memcpy(vp.buffer, KStartCode, startHeaderSize);
+    memcpy(vp.buffer + startHeaderSize, data.bytes, data.length);
     
-    uint32_t nalSize = (uint32_t)(vp.size - 4);
-    uint8_t *pNalSize = (uint8_t*)(&nalSize);
-    vp.buffer[0] = *(pNalSize + 3);
-    vp.buffer[1] = *(pNalSize + 2);
-    vp.buffer[2] = *(pNalSize + 1);
-    vp.buffer[3] = *(pNalSize);
+        uint32_t nalSize = (uint32_t)(vp.size - 4);
+        uint8_t *pNalSize = (uint8_t*)(&nalSize);
+        vp.buffer[0] = *(pNalSize + 3);
+        vp.buffer[1] = *(pNalSize + 2);
+        vp.buffer[2] = *(pNalSize + 1);
+        vp.buffer[3] = *(pNalSize);
     
     dispatch_async(_aQueue, ^{
         int nalType = (vp.buffer[4] & 0x1f);
@@ -566,7 +575,14 @@ static void didDecompress( void *decompressionOutputRefCon, void *sourceFrameRef
                 break;
         }
     });
+#else
+    VideoPacket *vp = [[VideoPacket alloc] initWithSize:data.length];
+    memcpy(vp.buffer, data.bytes, data.length);
     
+    dispatch_async(_aQueue, ^{
+        [self decodeVp:vp];
+    });
+#endif
 #else
     if (fileHandle != NULL)
     {

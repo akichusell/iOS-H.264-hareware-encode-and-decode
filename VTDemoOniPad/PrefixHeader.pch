@@ -14,5 +14,6 @@
 #define USE_HEVC             0
 #define DIRECT_DECODE        1
 #define SAMPLEBUFFER_DECODE  0
+#define SPLIT_NALUNIT        0 // bug. alwalys OFF
 
 #endif /* PrefixHeader_pch */
