@@ -6,7 +6,7 @@
 //  Copyright (c) 2015 Ganvir, Manish. All rights reserved.
 //
 
-#import "H264HwEncoderImpl.h"
+#import "VTHwEncoderImpl.h"
 
 @import VideoToolbox;
 @import AVFoundation;

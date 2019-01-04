@@ -7,10 +7,10 @@
 //
 
 #import <UIKit/UIKit.h>
-#import "H264HwEncoderImpl.h"
+#import "VTHwEncoderImpl.h"
 #import "AAPLEAGLLayer.h"
 
-@interface ViewController : UIViewController<AVCaptureVideoDataOutputSampleBufferDelegate, H264HwEncoderImplDelegate>
+@interface ViewController : UIViewController<AVCaptureVideoDataOutputSampleBufferDelegate, VTHwEncoderImplDelegate>
 @property (strong, nonatomic) AAPLEAGLLayer *glLayer;
 @end
 

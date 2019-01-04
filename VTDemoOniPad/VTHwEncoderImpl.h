@@ -8,7 +8,7 @@
 
 #import <Foundation/Foundation.h>
 @import AVFoundation;
-@protocol H264HwEncoderImplDelegate <NSObject>
+@protocol VTHwEncoderImplDelegate <NSObject>
 
 - (void)gotSpsPps:(NSData*)sps pps:(NSData*)pps;
 - (void)gotEncodedData:(NSData*)data isKeyFrame:(BOOL)isKeyFrame;
@@ -24,7 +24,7 @@
 - (void) End;
 
 @property (weak, nonatomic) NSString *error;
-@property (weak, nonatomic) id<H264HwEncoderImplDelegate> delegate;
+@property (weak, nonatomic) id<VTHwEncoderImplDelegate> delegate;
 
 @property (strong, nonatomic) NSData *sps;
 @property (strong, nonatomic) NSData *pps;

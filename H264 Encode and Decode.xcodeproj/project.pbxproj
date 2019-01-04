@@ -11,7 +11,7 @@
 		25BAEF661CDC444200D43A42 /* VideoFileParser.m in Sources */ = {isa = PBXBuildFile; fileRef = 25BAEF641CDC444200D43A42 /* VideoFileParser.m */; };
 		25BAEF741CDC446E00D43A42 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 25BAEF701CDC446E00D43A42 /* LaunchScreen.storyboard */; };
 		25BAEF751CDC446E00D43A42 /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 25BAEF721CDC446E00D43A42 /* Main.storyboard */; };
-		25BAEF781CDC448200D43A42 /* H264HwEncoderImpl.m in Sources */ = {isa = PBXBuildFile; fileRef = 25BAEF771CDC448200D43A42 /* H264HwEncoderImpl.m */; };
+		25BAEF781CDC448200D43A42 /* VTHwEncoderImpl.m in Sources */ = {isa = PBXBuildFile; fileRef = 25BAEF771CDC448200D43A42 /* VTHwEncoderImpl.m */; };
 		25BAEF7F1CDC449300D43A42 /* AppDelegate.m in Sources */ = {isa = PBXBuildFile; fileRef = 25BAEF7A1CDC449300D43A42 /* AppDelegate.m */; };
 		25BAEF811CDC449300D43A42 /* main.m in Sources */ = {isa = PBXBuildFile; fileRef = 25BAEF7C1CDC449300D43A42 /* main.m */; };
 		25BAEF821CDC449300D43A42 /* ViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = 25BAEF7E1CDC449300D43A42 /* ViewController.m */; };
@@ -26,8 +26,8 @@
 		25BAEF641CDC444200D43A42 /* VideoFileParser.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = VideoFileParser.m; sourceTree = "<group>"; };
 		25BAEF711CDC446E00D43A42 /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/LaunchScreen.storyboard; sourceTree = "<group>"; };
 		25BAEF731CDC446E00D43A42 /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/Main.storyboard; sourceTree = "<group>"; };
-		25BAEF761CDC448200D43A42 /* H264HwEncoderImpl.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = H264HwEncoderImpl.h; sourceTree = "<group>"; };
-		25BAEF771CDC448200D43A42 /* H264HwEncoderImpl.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = H264HwEncoderImpl.m; sourceTree = "<group>"; };
+		25BAEF761CDC448200D43A42 /* VTHwEncoderImpl.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = VTHwEncoderImpl.h; sourceTree = "<group>"; };
+		25BAEF771CDC448200D43A42 /* VTHwEncoderImpl.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = VTHwEncoderImpl.m; sourceTree = "<group>"; };
 		25BAEF791CDC449300D43A42 /* AppDelegate.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = AppDelegate.h; sourceTree = "<group>"; };
 		25BAEF7A1CDC449300D43A42 /* AppDelegate.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = AppDelegate.m; sourceTree = "<group>"; };
 		25BAEF7B1CDC449300D43A42 /* Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
@@ -51,8 +51,8 @@
 		2547F8D11CDC40E100C7DD90 /* Encode */ = {
 			isa = PBXGroup;
 			children = (
-				25BAEF761CDC448200D43A42 /* H264HwEncoderImpl.h */,
-				25BAEF771CDC448200D43A42 /* H264HwEncoderImpl.m */,
+				25BAEF761CDC448200D43A42 /* VTHwEncoderImpl.h */,
+				25BAEF771CDC448200D43A42 /* VTHwEncoderImpl.m */,
 			);
 			name = Encode;
 			sourceTree = "<group>";
@@ -186,7 +186,7 @@
 				25BAEF7F1CDC449300D43A42 /* AppDelegate.m in Sources */,
 				25BAEF651CDC444200D43A42 /* AAPLEAGLLayer.m in Sources */,
 				25BAEF661CDC444200D43A42 /* VideoFileParser.m in Sources */,
-				25BAEF781CDC448200D43A42 /* H264HwEncoderImpl.m in Sources */,
+				25BAEF781CDC448200D43A42 /* VTHwEncoderImpl.m in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
