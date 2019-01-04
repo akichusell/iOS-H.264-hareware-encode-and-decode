@@ -5,6 +5,7 @@
 @property uint8_t* buffer;
 @property NSInteger size;
 
+- (instancetype)initWithSize:(NSInteger)size;
 @end
 
 @interface VideoFileParser : NSObject

@@ -12,8 +12,10 @@
 
 - (void)gotSpsPps:(NSData*)sps pps:(NSData*)pps;
 - (void)gotEncodedData:(NSData*)data isKeyFrame:(BOOL)isKeyFrame;
+- (void)gotEncodedSamplebuffer:(CMSampleBufferRef)sampleBuffer isKeyFrame:(BOOL)isKeyFrame;
 
 @end
+
 @interface H264HwEncoderImpl : NSObject 
 
 - (void) initWithConfiguration;
@@ -23,5 +25,11 @@
 
 @property (weak, nonatomic) NSString *error;
 @property (weak, nonatomic) id<H264HwEncoderImplDelegate> delegate;
+
+@property (strong, nonatomic) NSData *sps;
+@property (strong, nonatomic) NSData *pps;
+@property (nonatomic) NSUInteger spsSize;
+@property (nonatomic) NSUInteger ppsSize;
+
 
 @end

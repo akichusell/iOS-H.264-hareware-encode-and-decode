@@ -7,10 +7,10 @@
 //
 
 #import <UIKit/UIKit.h>
-// 编码
 #import "H264HwEncoderImpl.h"
+#import "AAPLEAGLLayer.h"
+
 @interface ViewController : UIViewController<AVCaptureVideoDataOutputSampleBufferDelegate, H264HwEncoderImplDelegate>
-
-
+@property (strong, nonatomic) AAPLEAGLLayer *glLayer;
 @end
 
