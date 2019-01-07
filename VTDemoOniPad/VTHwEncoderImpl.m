@@ -87,6 +87,7 @@ void didCompressCallback(void *outputCallbackRefCon, void *sourceFrameRefCon, OS
         }
     }
     
+#if DIRECT_DECODE
     CMBlockBufferRef dataBuffer = CMSampleBufferGetDataBuffer(sampleBuffer);
     size_t length, totalLength;
     char *dataPointer;
@@ -95,6 +96,30 @@ void didCompressCallback(void *outputCallbackRefCon, void *sourceFrameRefCon, OS
         NSData* data = [[NSData alloc] initWithBytes:dataPointer length:totalLength];
         [encoder.delegate gotEncodedData:data isKeyFrame:keyframe];
     }
+#else
+    CMBlockBufferRef dataBuffer = CMSampleBufferGetDataBuffer(sampleBuffer);
+    size_t length, totalLength;
+    char *dataPointer;
+    OSStatus statusCodeRet = CMBlockBufferGetDataPointer(dataBuffer, 0, &length, &totalLength, &dataPointer);
+    if (statusCodeRet == noErr) {
+        size_t bufferOffset = 0;
+        static const int AVCCHeaderLength = 4;
+        while (bufferOffset < totalLength - AVCCHeaderLength) {
+            // Read the NAL unit length
+            uint32_t NALUnitLength = 0;
+            memcpy(&NALUnitLength, dataPointer + bufferOffset, AVCCHeaderLength);
+            
+            // Convert the length value from Big-endian to Little-endian
+            NALUnitLength = CFSwapInt32BigToHost(NALUnitLength);
+            
+            NSData* data = [[NSData alloc] initWithBytes:(dataPointer + bufferOffset + AVCCHeaderLength) length:NALUnitLength];
+            [encoder.delegate gotEncodedData:data isKeyFrame:keyframe];
+            
+            // Move to the next NAL unit in the block buffer
+            bufferOffset += AVCCHeaderLength + NALUnitLength;
+        }
+    }
+#endif
 }
 
 - (void) initEncode:(int)width height:(int)height hevc:(BOOL)useHEVC {

@@ -113,6 +113,17 @@
                                     <action selector="StartStopAction:" destination="BYZ-38-t0r" eventType="touchUpInside" id="ZSu-MR-iut"/>
                                 </connections>
                             </button>
+                            <button opaque="NO" contentMode="scaleToFill" contentHorizontalAlignment="center" contentVerticalAlignment="center" buttonType="roundedRect" lineBreakMode="middleTruncation" translatesAutoresizingMaskIntoConstraints="NO" id="S1B-TJ-LiZ" userLabel="Player Btn">
+                                <rect key="frame" x="16" y="613" width="100" height="50"/>
+                                <constraints>
+                                    <constraint firstAttribute="height" constant="50" id="3Po-LB-uRS"/>
+                                    <constraint firstAttribute="width" constant="100" id="vsy-1x-5Ex"/>
+                                </constraints>
+                                <state key="normal" title="play"/>
+                                <connections>
+                                    <action selector="PlayAction:" destination="BYZ-38-t0r" eventType="touchUpInside" id="6n5-cJ-XKN"/>
+                                </connections>
+                            </button>
                             <label opaque="NO" userInteractionEnabled="NO" contentMode="left" horizontalHuggingPriority="251" verticalHuggingPriority="251" text="" textAlignment="right" lineBreakMode="tailTruncation" baselineAdjustment="alignBaselines" adjustsFontSizeToFit="NO" translatesAutoresizingMaskIntoConstraints="NO" id="UmU-wO-iei">
                                 <rect key="frame" x="371" y="643" width="0.0" height="20"/>
                                 <constraints>
@@ -125,6 +136,7 @@
                         </subviews>
                         <color key="backgroundColor" red="1" green="1" blue="1" alpha="1" colorSpace="custom" customColorSpace="sRGB"/>
                         <constraints>
+                            <constraint firstItem="wfy-db-euE" firstAttribute="top" secondItem="S1B-TJ-LiZ" secondAttribute="bottom" constant="4" id="0Sn-eZ-b3E"/>
                             <constraint firstItem="wfy-db-euE" firstAttribute="top" secondItem="cqY-S4-Wti" secondAttribute="bottom" constant="8" id="2m0-pW-wmG"/>
                             <constraint firstItem="wfy-db-euE" firstAttribute="top" secondItem="n56-eK-gfa" secondAttribute="bottom" constant="8" id="3LO-D8-tqM"/>
                             <constraint firstItem="cqY-S4-Wti" firstAttribute="leading" secondItem="8bC-Xf-vdC" secondAttribute="leading" constant="8" id="9R6-i1-pwN"/>
@@ -133,6 +145,7 @@
                             <constraint firstItem="Iqk-kh-dtw" firstAttribute="centerX" secondItem="8bC-Xf-vdC" secondAttribute="centerX" id="XDg-Rq-cIv"/>
                             <constraint firstAttribute="trailing" secondItem="UmU-wO-iei" secondAttribute="trailing" constant="4" id="bsH-Sg-2ar"/>
                             <constraint firstItem="n56-eK-gfa" firstAttribute="centerX" secondItem="8bC-Xf-vdC" secondAttribute="centerX" id="f6m-OP-0N2"/>
+                            <constraint firstItem="S1B-TJ-LiZ" firstAttribute="leading" secondItem="8bC-Xf-vdC" secondAttribute="leading" constant="16" id="g0N-HD-qgQ"/>
                             <constraint firstAttribute="bottom" secondItem="UmU-wO-iei" secondAttribute="bottom" constant="4" id="kuB-ve-C2e"/>
                             <constraint firstItem="P5t-uD-tF3" firstAttribute="top" secondItem="8bC-Xf-vdC" secondAttribute="top" id="puw-qq-lvr"/>
                             <constraint firstItem="wfy-db-euE" firstAttribute="top" secondItem="P5t-uD-tF3" secondAttribute="bottom" id="xVs-xl-1dq"/>
@@ -144,6 +157,7 @@
                         <outlet property="curCodecLabel" destination="UmU-wO-iei" id="8XE-nU-Wza"/>
                         <outlet property="largeLabel" destination="gA6-oa-OOm" id="ibF-GN-NAz"/>
                         <outlet property="largeView" destination="wCi-bF-BPc" id="0p1-O7-c6W"/>
+                        <outlet property="playerBtn" destination="S1B-TJ-LiZ" id="sme-ta-Nu2"/>
                         <outlet property="smallLabel" destination="eDW-iN-8ia" id="5sB-Pc-bkg"/>
                         <outlet property="smallView" destination="dpt-ad-yhO" id="Bv9-bM-yeQ"/>
                         <outlet property="smallViewBtn" destination="M2H-Ml-K4a" id="2LO-qT-cyS"/>

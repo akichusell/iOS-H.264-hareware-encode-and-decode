@@ -24,10 +24,7 @@
     NSFileHandle *fileHandle;
 
     // 디코딩
-    uint8_t *_sps;
-    NSInteger _spsSize;
-    uint8_t *_pps;
-    NSInteger _ppsSize;
+    NSMutableArray<NSData*> *filePslist;
     VTDecompressionSessionRef _deocderSession;
     CMVideoFormatDescriptionRef _decoderFormatDescription;
     bool playCalled;
@@ -49,10 +46,7 @@
 
 @property (strong, nonatomic) AVCaptureVideoPreviewLayer *previewLayer;
 @property (strong, nonatomic) AVSampleBufferDisplayLayer *sbDisplayLayer;
-
-#if DIRECT_DECODE
 @property (nonatomic) dispatch_queue_t aQueue;
-#endif
 
 @property (nonatomic) BOOL useHEVC;
 
@@ -94,10 +88,11 @@ static void didDecompress( void *decompressionOutputRefCon, void *sourceFrameRef
     _curCodecLabel.text = @"";
     _cameraWidth = 0;
     _cameraHeight = 0;
-#if DIRECT_DECODE
     _aQueue = dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0);
-#endif
     
+#if DIRECT_DECODE
+    _playerBtn.hidden = YES;
+#else
     // 파일 저장 위치
     NSFileManager *fileManager = [NSFileManager defaultManager];
     NSArray *paths = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES);
@@ -105,6 +100,9 @@ static void didDecompress( void *decompressionOutputRefCon, void *sourceFrameRef
     h264FileSavePath = [documentsDirectory stringByAppendingPathComponent:@"test.h264"];
     [fileManager removeItemAtPath:h264FileSavePath error:nil];
     [fileManager createFileAtPath:h264FileSavePath contents:nil attributes:nil];
+    
+    filePslist = [NSMutableArray array];
+#endif
 }
 
 - (void)moveDecodeViewToTargetView:(UIView*)targetView {
@@ -141,22 +139,22 @@ static void didDecompress( void *decompressionOutputRefCon, void *sourceFrameRef
 
 // MARK: - Actions
 
-- (IBAction)playerAction:(id)sender {
+- (IBAction)PlayAction:(id)sender {
 #if DIRECT_DECODE
 #else
     if (playCalled) {
         playCalled = false;
         [_playerBtn setTitle:@"close" forState:UIControlStateNormal];
         
-        [self createDecodedView];
+        [self moveDecodeViewToTargetView:self.largeView];
         
-        dispatch_async(dispatch_get_global_queue(0, 0), ^{
+        dispatch_async(_aQueue, ^{
             [self decodeFile:@"test" fileExt:@"h264"];
         });
     } else {
         playCalled = true;
         [_playerBtn setTitle:@"play" forState:UIControlStateNormal];
-        [self clearH264Deocder];
+        [self clearVTDecoder];
         [_glLayer removeFromSuperlayer];
     }
 #endif
@@ -218,48 +216,48 @@ static void didDecompress( void *decompressionOutputRefCon, void *sourceFrameRef
 
 #pragma mark - Decode
 
--(BOOL)initVTDecoder {
-    if(_deocderSession) {
-        return YES;
-    }
-    
-    const uint8_t* const parameterSetPointers[2] = { _sps, _pps };
-    const size_t parameterSetSizes[2] = { _spsSize, _ppsSize };
-    OSStatus status = CMVideoFormatDescriptionCreateFromH264ParameterSets(kCFAllocatorDefault,
-                                                                          2, //param count
-                                                                          parameterSetPointers,
-                                                                          parameterSetSizes,
-                                                                          4, //nal start code size
-                                                                          &_decoderFormatDescription);
-    
-    if(status == noErr) {
-        CFDictionaryRef attrs = NULL;
-        const void *keys[] = { kCVPixelBufferPixelFormatTypeKey };
-        
-        //      kCVPixelFormatType_420YpCbCr8Planar is YUV420
-        //      kCVPixelFormatType_420YpCbCr8BiPlanarFullRange is NV12
-        uint32_t v = kCVPixelFormatType_420YpCbCr8BiPlanarFullRange;
-        const void *values[] = { CFNumberCreate(NULL, kCFNumberSInt32Type, &v) };
-        attrs = CFDictionaryCreate(NULL, keys, values, 1, NULL, NULL);
-        
-        VTDecompressionOutputCallbackRecord callBackRecord;
-        callBackRecord.decompressionOutputCallback = didDecompress;
-        callBackRecord.decompressionOutputRefCon = NULL;
-        
-        status = VTDecompressionSessionCreate(kCFAllocatorDefault,
-                                              _decoderFormatDescription,
-                                              NULL, attrs,
-                                              &callBackRecord,
-                                              &_deocderSession);
-        CFRelease(attrs);
-    } else {
-        NSLog(@"video format create failed status=%d", (int)status);
-        _deocderSession = nil;
-        return NO;
-    }
-    
-    return YES;
-}
+//-(BOOL)initVTDecoder {
+//    if(_deocderSession) {
+//        return YES;
+//    }
+//
+//    const uint8_t* const parameterSetPointers[2] = { _sps, _pps };
+//    const size_t parameterSetSizes[2] = { _spsSize, _ppsSize };
+//    OSStatus status = CMVideoFormatDescriptionCreateFromH264ParameterSets(kCFAllocatorDefault,
+//                                                                          2, //param count
+//                                                                          parameterSetPointers,
+//                                                                          parameterSetSizes,
+//                                                                          4, //nal start code size
+//                                                                          &_decoderFormatDescription);
+//
+//    if(status == noErr) {
+//        CFDictionaryRef attrs = NULL;
+//        const void *keys[] = { kCVPixelBufferPixelFormatTypeKey };
+//
+//        //      kCVPixelFormatType_420YpCbCr8Planar is YUV420
+//        //      kCVPixelFormatType_420YpCbCr8BiPlanarFullRange is NV12
+//        uint32_t v = kCVPixelFormatType_420YpCbCr8BiPlanarFullRange;
+//        const void *values[] = { CFNumberCreate(NULL, kCFNumberSInt32Type, &v) };
+//        attrs = CFDictionaryCreate(NULL, keys, values, 1, NULL, NULL);
+//
+//        VTDecompressionOutputCallbackRecord callBackRecord;
+//        callBackRecord.decompressionOutputCallback = didDecompress;
+//        callBackRecord.decompressionOutputRefCon = NULL;
+//
+//        status = VTDecompressionSessionCreate(kCFAllocatorDefault,
+//                                              _decoderFormatDescription,
+//                                              NULL, attrs,
+//                                              &callBackRecord,
+//                                              &_deocderSession);
+//        CFRelease(attrs);
+//    } else {
+//        NSLog(@"video format create failed status=%d", (int)status);
+//        _deocderSession = nil;
+//        return NO;
+//    }
+//
+//    return YES;
+//}
 
 -(BOOL)initVTDecoderWithPsList:(NSArray<NSData*>*)psList {
     if(_deocderSession) {
@@ -337,10 +335,6 @@ static void didDecompress( void *decompressionOutputRefCon, void *sourceFrameRef
         CFRelease(_decoderFormatDescription);
         _decoderFormatDescription = NULL;
     }
-    
-    free(_sps);
-    free(_pps);
-    _spsSize = _ppsSize = 0;
 }
 
 -(CVPixelBufferRef)decode:(VideoPacket*)vp {
@@ -445,26 +439,31 @@ static void didDecompress( void *decompressionOutputRefCon, void *sourceFrameRef
         int nalType = vp.buffer[4] & 0x1F;
         switch (nalType) {
             case 0x05:
-//                NSLog(@"Nal type is IDR frame");
-                if([self initVTDecoder]) {
+                NSLog(@"Nal type is IDR frame");
+                if([self initVTDecoderWithPsList:filePslist]) {
                     pixelBuffer = [self decode:vp];
                 }
                 break;
-            case 0x07:
-//                NSLog(@"Nal type is SPS");
-                _spsSize = vp.size - 4;
-                _sps = malloc(_spsSize);
-                memcpy(_sps, vp.buffer + 4, _spsSize);
+            case 0x07: {
+                NSLog(@"Nal type is SPS");
+//                _spsSize = vp.size - 4;
+//                _sps = malloc(_spsSize);
+//                memcpy(_sps, vp.buffer + 4, _spsSize);
+                NSData* sps = [NSData dataWithBytes:(vp.buffer + 4) length:(vp.size - 4)];
+                [filePslist addObject:sps];
                 break;
-            case 0x08:
-//                NSLog(@"Nal type is PPS");
-                _ppsSize = vp.size - 4;
-                _pps = malloc(_ppsSize);
-                memcpy(_pps, vp.buffer + 4, _ppsSize);
+            }
+            case 0x08: {
+                NSLog(@"Nal type is PPS");
+//                _ppsSize = vp.size - 4;
+//                _pps = malloc(_ppsSize);
+//                memcpy(_pps, vp.buffer + 4, _ppsSize);
+                NSData* pps = [NSData dataWithBytes:(vp.buffer + 4) length:(vp.size - 4)];
+                [filePslist addObject:pps];
                 break;
-                
+            }
             default:
-//                NSLog(@"Nal type is B/P frame");
+                NSLog(@"Nal type is B/P frame");
                 pixelBuffer = [self decode:vp];
                 break;
         }
@@ -500,15 +499,7 @@ static void didDecompress( void *decompressionOutputRefCon, void *sourceFrameRef
     self.largeLabel.text = @"encoded";
 #else
     // preview display
-    AVSampleBufferDisplayLayer *sb = [[AVSampleBufferDisplayLayer alloc]init];
-    sb.backgroundColor = [UIColor blackColor].CGColor;
-    _sbDisplayLayer = sb;
-    sb.videoGravity = AVLayerVideoGravityResizeAspect;
-    float width = self.view.frame.size.width * WIDTH_RATIO;
-    float height = width * 16.f/9.f;
-    _sbDisplayLayer.frame = CGRectMake((self.view.frame.size.width-width)/2, 20, width, height);
-    [self.view.layer addSublayer:_sbDisplayLayer];
-    
+    [self movePreviewViewToTargetView:self.largeView];
     fileHandle = [NSFileHandle fileHandleForWritingAtPath:h264FileSavePath];
 #endif
     
