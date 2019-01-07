@@ -148,7 +148,7 @@ static void didDecompress( void *decompressionOutputRefCon, void *sourceFrameRef
                                                                           parameterSetPointers,
                                                                           parameterSetSizes,
                                                                           4, //nal start code size
-                                                                          nil,
+                                                                          NULL,
                                                                           &_decoderFormatDescription);
 #else
     OSStatus status = CMVideoFormatDescriptionCreateFromH264ParameterSets(kCFAllocatorDefault,
@@ -178,8 +178,12 @@ static void didDecompress( void *decompressionOutputRefCon, void *sourceFrameRef
                                               &callBackRecord,
                                               &_deocderSession);
         CFRelease(attrs);
+        if (status != noErr) {
+            NSLog(@"VTDecompressionSessionCreate failed statud=%d", (int)status);
+            return NO;
+        }
     } else {
-        NSLog(@"IOS8VT: reset decoder session failed status=%d", (int)status);
+        NSLog(@"video format create failed status=%d", (int)status);
         _deocderSession = nil;
         return NO;
     }
@@ -613,25 +617,6 @@ static void didDecompress( void *decompressionOutputRefCon, void *sourceFrameRef
         [fileHandle writeData:ByteHeader];
         [fileHandle writeData:data];
     }
-#endif
-}
-
-- (void)gotEncodedSamplebuffer:(CMSampleBufferRef)sampleBuffer isKeyFrame:(BOOL)isKeyFrame {
-#if (DIRECT_DECODE && SAMPLEBUFFER_DECODE)
-    if (isKeyFrame) {
-        if (![self initH264DecoderWithSps:h264Encoder.sps
-                                  spsSize:h264Encoder.spsSize
-                                      pps:h264Encoder.pps
-                                  ppsSize:h264Encoder.ppsSize])
-        {
-            NSLog(@"initH264Decoder failed");
-            return;
-        }
-    }
-    
-    dispatch_async(_aQueue, ^{
-        [self decodeSamplebuffer:sampleBuffer];
-    });
 #endif
 }
 

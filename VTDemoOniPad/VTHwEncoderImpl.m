@@ -105,11 +105,6 @@ void didCompressCallback(void *outputCallbackRefCon, void *sourceFrameRefCon, OS
 #endif
     }
     
-#if SAMPLEBUFFER_DECODE
-    if (encoder.delegate) {
-        [encoder.delegate gotEncodedSamplebuffer:sampleBuffer isKeyFrame:keyframe];
-    }
-#else
     CMBlockBufferRef dataBuffer = CMSampleBufferGetDataBuffer(sampleBuffer);
     size_t length, totalLength;
     char *dataPointer;
@@ -138,7 +133,6 @@ void didCompressCallback(void *outputCallbackRefCon, void *sourceFrameRefCon, OS
         [encoder.delegate gotEncodedData:data isKeyFrame:keyframe];
 #endif
     }
-#endif
 }
 
 - (void) initEncode:(int)width  height:(int)height {

@@ -12,7 +12,6 @@
 
 - (void)gotSpsPps:(NSData*)sps pps:(NSData*)pps;
 - (void)gotEncodedData:(NSData*)data isKeyFrame:(BOOL)isKeyFrame;
-- (void)gotEncodedSamplebuffer:(CMSampleBufferRef)sampleBuffer isKeyFrame:(BOOL)isKeyFrame;
 
 @end
 
