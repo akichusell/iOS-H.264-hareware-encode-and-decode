@@ -128,6 +128,8 @@ static void didDecompress( void *decompressionOutputRefCon, void *sourceFrameRef
         CFRelease(attrs);
     } else {
         NSLog(@"IOS8VT: reset decoder session failed status=%d", (int)status);
+        _deocderSession = nil;
+        return NO;
     }
     
     return YES;
@@ -140,13 +142,22 @@ static void didDecompress( void *decompressionOutputRefCon, void *sourceFrameRef
 
     const uint8_t* const parameterSetPointers[2] = { sps.bytes, pps.bytes};
     const size_t parameterSetSizes[2] = { spsSize, ppsSize };
+#if USE_HEVC
+    OSStatus status = CMVideoFormatDescriptionCreateFromHEVCParameterSets(kCFAllocatorDefault,
+                                                                          2, //param count
+                                                                          parameterSetPointers,
+                                                                          parameterSetSizes,
+                                                                          4, //nal start code size
+                                                                          nil,
+                                                                          &_decoderFormatDescription);
+#else
     OSStatus status = CMVideoFormatDescriptionCreateFromH264ParameterSets(kCFAllocatorDefault,
                                                                           2, //param count
                                                                           parameterSetPointers,
                                                                           parameterSetSizes,
                                                                           4, //nal start code size
                                                                           &_decoderFormatDescription);
-    
+#endif
     if(status == noErr) {
         CFDictionaryRef attrs = NULL;
         const void *keys[] = { kCVPixelBufferPixelFormatTypeKey };
@@ -169,6 +180,8 @@ static void didDecompress( void *decompressionOutputRefCon, void *sourceFrameRef
         CFRelease(attrs);
     } else {
         NSLog(@"IOS8VT: reset decoder session failed status=%d", (int)status);
+        _deocderSession = nil;
+        return NO;
     }
     
     return YES;
@@ -178,7 +191,7 @@ static void didDecompress( void *decompressionOutputRefCon, void *sourceFrameRef
     return NO;
 }
 
--(void)clearH264Deocder {
+-(void)clearVTDeocder {
     if(_deocderSession) {
         VTDecompressionSessionInvalidate(_deocderSession);
         CFRelease(_deocderSession);
@@ -390,6 +403,9 @@ static void didDecompress( void *decompressionOutputRefCon, void *sourceFrameRef
         startCalled = true;
         [self stopCamera];
         [vtEncoder End];
+#if DIRECT_DECODE
+        [self clearVTDeocder];
+#endif
     }
 }
 
@@ -540,6 +556,11 @@ static void didDecompress( void *decompressionOutputRefCon, void *sourceFrameRef
             NSLog(@"initH264Decoder failed");
             return;
         }
+    }
+    
+    if (!_deocderSession) {
+        NSLog(@"decoder session is nil");
+        return;
     }
     
 #if SPLIT_NALUNIT

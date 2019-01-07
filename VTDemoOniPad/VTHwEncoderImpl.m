@@ -50,6 +50,31 @@ void didCompressCallback(void *outputCallbackRefCon, void *sourceFrameRefCon, OS
     // Check if we have got a key frame first
     bool keyframe = !CFDictionaryContainsKey( (CFArrayGetValueAtIndex(CMSampleBufferGetSampleAttachmentsArray(sampleBuffer, true), 0)), kCMSampleAttachmentKey_NotSync);
     if (keyframe) {
+#if USE_HEVC
+        CMFormatDescriptionRef format = CMSampleBufferGetFormatDescription(sampleBuffer);
+        size_t sparameterSetSize, sparameterSetCount;
+        const uint8_t *sparameterSet;
+        OSStatus statusCode = CMVideoFormatDescriptionGetHEVCParameterSetAtIndex(format, 0, &sparameterSet, &sparameterSetSize, &sparameterSetCount, 0 );
+        if (statusCode == noErr) {
+            // Found sps and now check for pps
+            size_t pparameterSetSize, pparameterSetCount;
+            const uint8_t *pparameterSet;
+            OSStatus statusCode = CMVideoFormatDescriptionGetHEVCParameterSetAtIndex(format, 1, &pparameterSet, &pparameterSetSize, &pparameterSetCount, 0 );
+            if (statusCode == noErr)
+            {
+                // Found pps
+                encoder.sps = [NSData dataWithBytes:sparameterSet length:sparameterSetSize];
+                encoder.spsSize = sparameterSetSize;
+                
+                encoder.pps = [NSData dataWithBytes:pparameterSet length:pparameterSetSize];
+                encoder.ppsSize = pparameterSetSize;
+                
+                if (encoder.delegate) {
+                    [encoder.delegate gotSpsPps:encoder.sps pps:encoder.pps];
+                }
+            }
+        }
+#else
         CMFormatDescriptionRef format = CMSampleBufferGetFormatDescription(sampleBuffer);
         // CFDictionaryRef extensionDict = CMFormatDescriptionGetExtensions(format);
         // Get the extensions
@@ -77,6 +102,7 @@ void didCompressCallback(void *outputCallbackRefCon, void *sourceFrameRefCon, OS
                 }
             }
         }
+#endif
     }
     
 #if SAMPLEBUFFER_DECODE
