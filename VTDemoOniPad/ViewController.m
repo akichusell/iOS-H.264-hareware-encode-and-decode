@@ -534,13 +534,13 @@ static void didDecompress( void *decompressionOutputRefCon, void *sourceFrameRef
 }
 
 - (BOOL) startCamera {
-    int targetWidth = 2560;
-    int targetHeight = 1440;
+    int targetWidth = 3088; //2560;
+    int targetHeight = 2320; //1440;
     int targetFps = 24;
+    BOOL useFrontCam = NO;
     
     NSError *deviceError;
-
-    AVCaptureDevice *cameraDevice = [AVCaptureDevice defaultDeviceWithMediaType:AVMediaTypeVideo];
+    AVCaptureDevice* cameraDevice = (useFrontCam)? [self frontCamera] : [self backCamera];
     AVCaptureDeviceInput *inputDevice = [AVCaptureDeviceInput deviceInputWithDevice:cameraDevice error:&deviceError];
     
     AVCaptureVideoDataOutput *outputDevice = [[AVCaptureVideoDataOutput alloc] init];
@@ -626,13 +626,29 @@ static void didDecompress( void *decompressionOutputRefCon, void *sourceFrameRef
         return NO;
     }
     
+    // fixed portrait
     AVCaptureConnection* connection = [outputDevice connectionWithMediaType:AVMediaTypeVideo];
     connection.videoOrientation = AVCaptureVideoOrientationPortrait;
+    connection.videoMirrored = useFrontCam? YES : NO;
     
     [captureSession commitConfiguration];
     [captureSession startRunning];
     
     return YES;
+}
+
+- (AVCaptureDevice*)frontCamera {
+    AVCaptureDevice *cameraDevice = nil;
+    for (AVCaptureDevice *captureDevice in [AVCaptureDevice devicesWithMediaType:AVMediaTypeVideo]) {
+        if (captureDevice.position == AVCaptureDevicePositionFront) {
+            return captureDevice;
+        }
+    }
+    return cameraDevice;
+}
+
+- (AVCaptureDevice*)backCamera {
+    return [AVCaptureDevice defaultDeviceWithMediaType:AVMediaTypeVideo];
 }
 
 #pragma mark - AVCaptureVideoDataOutputSampleBufferDelegate

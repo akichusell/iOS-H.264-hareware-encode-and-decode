@@ -11,6 +11,8 @@
 @import VideoToolbox;
 @import AVFoundation;
 
+#define BITRATE_KBPS 5000 // 5 Mbps
+
 @interface VTHwEncoderImpl()
 @property (nonatomic) BOOL useHEVC;
 @end
@@ -151,7 +153,7 @@ void didCompressCallback(void *outputCallbackRefCon, void *sourceFrameRefCon, OS
         }
     }
     
-    int32_t bitrateValue = 5000 * 1024; // 5 Mbps
+    int32_t bitrateValue = BITRATE_KBPS * 1024;
     status = VTSessionSetProperty(EncodingSession, kVTCompressionPropertyKey_AverageBitRate, CFNumberCreate(kCFAllocatorDefault, kCFNumberSInt32Type, &bitrateValue));
     if (status != 0) {
         NSLog(@"kVTCompressionPropertyKey_AverageBitRate error %@", @(status));
