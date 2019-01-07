@@ -29,10 +29,7 @@
     aQueue = dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0);
     frameCount = 0;
     
-    _sps = NULL;
-    _spsSize = 0;
-    _pps = NULL;
-    _ppsSize = 0;
+    _psList = NULL;
 }
 
 void didCompressCallback(void *outputCallbackRefCon, void *sourceFrameRefCon, OSStatus status, VTEncodeInfoFlags infoFlags, CMSampleBufferRef sampleBuffer)
@@ -50,57 +47,36 @@ void didCompressCallback(void *outputCallbackRefCon, void *sourceFrameRefCon, OS
     // Check if we have got a key frame first
     bool keyframe = !CFDictionaryContainsKey( (CFArrayGetValueAtIndex(CMSampleBufferGetSampleAttachmentsArray(sampleBuffer, true), 0)), kCMSampleAttachmentKey_NotSync);
     if (keyframe) {
+        CMFormatDescriptionRef format = CMSampleBufferGetFormatDescription(sampleBuffer);
+        NSMutableArray<NSData*>* pslist = [NSMutableArray array];
+        size_t spsSize, count;
+        const uint8_t *sps;
 #if USE_HEVC
-        CMFormatDescriptionRef format = CMSampleBufferGetFormatDescription(sampleBuffer);
-        size_t sparameterSetSize, sparameterSetCount;
-        const uint8_t *sparameterSet;
-        OSStatus statusCode = CMVideoFormatDescriptionGetHEVCParameterSetAtIndex(format, 0, &sparameterSet, &sparameterSetSize, &sparameterSetCount, 0 );
-        if (statusCode == noErr) {
-            // Found sps and now check for pps
-            size_t pparameterSetSize, pparameterSetCount;
-            const uint8_t *pparameterSet;
-            OSStatus statusCode = CMVideoFormatDescriptionGetHEVCParameterSetAtIndex(format, 1, &pparameterSet, &pparameterSetSize, &pparameterSetCount, 0 );
-            if (statusCode == noErr)
-            {
-                // Found pps
-                encoder.sps = [NSData dataWithBytes:sparameterSet length:sparameterSetSize];
-                encoder.spsSize = sparameterSetSize;
-                
-                encoder.pps = [NSData dataWithBytes:pparameterSet length:pparameterSetSize];
-                encoder.ppsSize = pparameterSetSize;
-                
-                if (encoder.delegate) {
-                    [encoder.delegate gotSpsPps:encoder.sps pps:encoder.pps];
-                }
-            }
+        CMVideoFormatDescriptionGetHEVCParameterSetAtIndex(format, 0, &sps, &spsSize, &count, 0);
+        [pslist addObject:[NSData dataWithBytes:sps
+                                         length:spsSize]];
+        for (int i=1; i<count; i++) {
+            size_t size;
+            const uint8_t *pps;
+            CMVideoFormatDescriptionGetHEVCParameterSetAtIndex(format, i, &pps, &size, NULL, 0);
+            [pslist addObject:[NSData dataWithBytes:pps
+                                              length:size]];
         }
+        encoder.psList = pslist;
 #else
-        CMFormatDescriptionRef format = CMSampleBufferGetFormatDescription(sampleBuffer);
-        // CFDictionaryRef extensionDict = CMFormatDescriptionGetExtensions(format);
-        // Get the extensions
-        // From the extensions get the dictionary with key "SampleDescriptionExtensionAtoms"
-        // From the dict, get the value for the key "avcC"
-        size_t sparameterSetSize, sparameterSetCount;
-        const uint8_t *sparameterSet;
-        OSStatus statusCode = CMVideoFormatDescriptionGetH264ParameterSetAtIndex(format, 0, &sparameterSet, &sparameterSetSize, &sparameterSetCount, 0 );
-        if (statusCode == noErr) {
-            // Found sps and now check for pps
-            size_t pparameterSetSize, pparameterSetCount;
-            const uint8_t *pparameterSet;
-            OSStatus statusCode = CMVideoFormatDescriptionGetH264ParameterSetAtIndex(format, 1, &pparameterSet, &pparameterSetSize, &pparameterSetCount, 0 );
-            if (statusCode == noErr)
-            {
-                // Found pps
-                encoder.sps = [NSData dataWithBytes:sparameterSet length:sparameterSetSize];
-                encoder.spsSize = sparameterSetSize;
-                
-                encoder.pps = [NSData dataWithBytes:pparameterSet length:pparameterSetSize];
-                encoder.ppsSize = pparameterSetSize;
-                
-                if (encoder.delegate) {
-                    [encoder.delegate gotSpsPps:encoder.sps pps:encoder.pps];
-                }
-            }
+        CMVideoFormatDescriptionGetH264ParameterSetAtIndex(format, 0, &sps, &spsSize, &count, 0);
+        [pslist addObject:[NSData dataWithBytes:sps
+                                         length:spsSize]];
+        for (int i=1; i<count; i++) {
+            size_t size;
+            const uint8_t *pps;
+            CMVideoFormatDescriptionGetH264ParameterSetAtIndex(format, i, &pps, &size, NULL, 0);
+            [pslist addObject:[NSData dataWithBytes:pps
+                                             length:size]];
+        }
+        encoder.psList = pslist;
+        if (encoder.delegate) {
+            [encoder.delegate gotPsList:encoder.psList];
         }
 #endif
     }
@@ -110,28 +86,8 @@ void didCompressCallback(void *outputCallbackRefCon, void *sourceFrameRefCon, OS
     char *dataPointer;
     OSStatus statusCodeRet = CMBlockBufferGetDataPointer(dataBuffer, 0, &length, &totalLength, &dataPointer);
     if (statusCodeRet == noErr) {
-#if SPLIT_NALUNIT
-        size_t bufferOffset = 0;
-        static const int AVCCHeaderLength = 4;
-        while (bufferOffset < totalLength - AVCCHeaderLength) {
-
-            // Read the NAL unit length
-            uint32_t NALUnitLength = 0;
-            memcpy(&NALUnitLength, dataPointer + bufferOffset, AVCCHeaderLength);
-
-            // Convert the length value from Big-endian to Little-endian
-            NALUnitLength = CFSwapInt32BigToHost(NALUnitLength);
-
-            NSData* data = [[NSData alloc] initWithBytes:(dataPointer + bufferOffset + AVCCHeaderLength) length:NALUnitLength];
-            [encoder.delegate gotEncodedData:data isKeyFrame:keyframe];
-
-            // Move to the next NAL unit in the block buffer
-            bufferOffset += AVCCHeaderLength + NALUnitLength;
-        }
-#else
         NSData* data = [[NSData alloc] initWithBytes:dataPointer length:totalLength];
         [encoder.delegate gotEncodedData:data isKeyFrame:keyframe];
-#endif
     }
 }
 

@@ -10,7 +10,7 @@
 @import AVFoundation;
 @protocol VTHwEncoderImplDelegate <NSObject>
 
-- (void)gotSpsPps:(NSData*)sps pps:(NSData*)pps;
+- (void)gotPsList:(NSArray<NSData*>*)pslist;
 - (void)gotEncodedData:(NSData*)data isKeyFrame:(BOOL)isKeyFrame;
 
 @end
@@ -25,10 +25,6 @@
 @property (weak, nonatomic) NSString *error;
 @property (weak, nonatomic) id<VTHwEncoderImplDelegate> delegate;
 
-@property (strong, nonatomic) NSData *sps;
-@property (strong, nonatomic) NSData *pps;
-@property (nonatomic) NSUInteger spsSize;
-@property (nonatomic) NSUInteger ppsSize;
-
+@property (strong, nonatomic) NSArray<NSData*> *psList;
 
 @end

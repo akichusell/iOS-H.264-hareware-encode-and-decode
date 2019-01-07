@@ -45,7 +45,7 @@
 
 @end
 
-// 디코딩
+// decode callback
 static void didDecompress( void *decompressionOutputRefCon, void *sourceFrameRefCon, OSStatus status, VTDecodeInfoFlags infoFlags, CVImageBufferRef pixelBuffer, CMTime presentationTimeStamp, CMTime presentationDuration ){
 #if DIRECT_DECODE
     if(pixelBuffer) {
@@ -90,9 +90,9 @@ static void didDecompress( void *decompressionOutputRefCon, void *sourceFrameRef
     [fileManager createFileAtPath:h264FileSavePath contents:nil attributes:nil];
 }
 
-#pragma mark - 디코딩
+#pragma mark - Decode
 
--(BOOL)initH264Decoder {
+-(BOOL)initVTDecoder {
     if(_deocderSession) {
         return YES;
     }
@@ -127,7 +127,7 @@ static void didDecompress( void *decompressionOutputRefCon, void *sourceFrameRef
                                               &_deocderSession);
         CFRelease(attrs);
     } else {
-        NSLog(@"IOS8VT: reset decoder session failed status=%d", (int)status);
+        NSLog(@"video format create failed status=%d", (int)status);
         _deocderSession = nil;
         return NO;
     }
@@ -135,22 +135,23 @@ static void didDecompress( void *decompressionOutputRefCon, void *sourceFrameRef
     return YES;
 }
 
--(BOOL)initH264DecoderWithSps:(NSData*)sps spsSize:(NSUInteger)spsSize pps:(NSData*)pps ppsSize:(NSUInteger)ppsSize {
+-(BOOL)initVTDecoderWithPsList:(NSArray<NSData*>*)psList {
     if(_deocderSession) {
         return YES;
     }
-
-    const uint8_t* const parameterSetPointers[2] = { sps.bytes, pps.bytes};
-    const size_t parameterSetSizes[2] = { spsSize, ppsSize };
 #if USE_HEVC
+    const uint8_t* const parameterSetPointers[3] = { psList[0].bytes, psList[1].bytes, psList[2].bytes };
+    const size_t parameterSetSizes[3] = { psList[0].length, psList[1].length, psList[2].length };
     OSStatus status = CMVideoFormatDescriptionCreateFromHEVCParameterSets(kCFAllocatorDefault,
-                                                                          2, //param count
+                                                                          3, //param count
                                                                           parameterSetPointers,
                                                                           parameterSetSizes,
                                                                           4, //nal start code size
                                                                           NULL,
                                                                           &_decoderFormatDescription);
 #else
+    const uint8_t* const parameterSetPointers[2] = { psList[0].bytes, psList[1].bytes };
+    const size_t parameterSetSizes[2] = { psList[0].length, psList[1].length };
     OSStatus status = CMVideoFormatDescriptionCreateFromH264ParameterSets(kCFAllocatorDefault,
                                                                           2, //param count
                                                                           parameterSetPointers,
@@ -161,7 +162,6 @@ static void didDecompress( void *decompressionOutputRefCon, void *sourceFrameRef
     if(status == noErr) {
         CFDictionaryRef attrs = NULL;
         const void *keys[] = { kCVPixelBufferPixelFormatTypeKey };
-        
         //      kCVPixelFormatType_420YpCbCr8Planar is YUV420
         //      kCVPixelFormatType_420YpCbCr8BiPlanarFullRange is NV12
         uint32_t v = kCVPixelFormatType_420YpCbCr8BiPlanarFullRange;
@@ -333,7 +333,7 @@ static void didDecompress( void *decompressionOutputRefCon, void *sourceFrameRef
         switch (nalType) {
             case 0x05:
 //                NSLog(@"Nal type is IDR frame");
-                if([self initH264Decoder]) {
+                if([self initVTDecoder]) {
                     pixelBuffer = [self decode:vp];
                 }
                 break;
@@ -531,7 +531,7 @@ static void didDecompress( void *decompressionOutputRefCon, void *sourceFrameRef
 
 #pragma mark - H264HwEncoderImplDelegate delegate
 
-- (void)gotSpsPps:(NSData*)sps pps:(NSData*)pps
+- (void)gotPsList:(NSArray<NSData*>*)pslist
 {
 #if DIRECT_DECODE
     // nothing to do
@@ -539,11 +539,10 @@ static void didDecompress( void *decompressionOutputRefCon, void *sourceFrameRef
     const char bytes[] = "\x00\x00\x00\x01";
     size_t length = (sizeof bytes) - 1; //string literals have implicit trailing '\0'
     NSData *ByteHeader = [NSData dataWithBytes:bytes length:length];
-    
-    [fileHandle writeData:ByteHeader];
-    [fileHandle writeData:sps];
-    [fileHandle writeData:ByteHeader];
-    [fileHandle writeData:pps];
+    for(NSData* ps in pslist) {
+        [fileHandle writeData:ByteHeader];
+        [fileHandle writeData:ps];
+    }
 #endif
 }
 
@@ -552,10 +551,7 @@ static void didDecompress( void *decompressionOutputRefCon, void *sourceFrameRef
 //    NSLog(@"gotEncodedData %d", (int)data.length);
 #if DIRECT_DECODE
     if (isKeyFrame) {
-        if (![self initH264DecoderWithSps:vtEncoder.sps
-                                  spsSize:vtEncoder.spsSize
-                                      pps:vtEncoder.pps
-                                  ppsSize:vtEncoder.ppsSize])
+        if (![self initVTDecoderWithPsList:vtEncoder.psList])
         {
             NSLog(@"initH264Decoder failed");
             return;
@@ -567,47 +563,12 @@ static void didDecompress( void *decompressionOutputRefCon, void *sourceFrameRef
         return;
     }
     
-#if SPLIT_NALUNIT
-    const int startHeaderSize = 4;
-    VideoPacket *vp = [[VideoPacket alloc] initWithSize:(data.length + startHeaderSize)];
-    const uint8_t KStartCode[startHeaderSize] = {0, 0, 0, 1};
-    memcpy(vp.buffer, KStartCode, startHeaderSize);
-    memcpy(vp.buffer + startHeaderSize, data.bytes, data.length);
-    
-        uint32_t nalSize = (uint32_t)(vp.size - 4);
-        uint8_t *pNalSize = (uint8_t*)(&nalSize);
-        vp.buffer[0] = *(pNalSize + 3);
-        vp.buffer[1] = *(pNalSize + 2);
-        vp.buffer[2] = *(pNalSize + 1);
-        vp.buffer[3] = *(pNalSize);
-    
-    dispatch_async(_aQueue, ^{
-        int nalType = (vp.buffer[4] & 0x1f);
-        switch (nalType) {
-            case 0x05:
-                NSLog(@"Nal type is IDR frame");
-                [self decodeVp:vp];
-                break;
-            case 0x07:
-                NSLog(@"Nal type is SPS");
-                break;
-            case 0x08:
-                NSLog(@"Nal type is PPS");
-                break;
-            default:
-                NSLog(@"Nal type is B/P frame");
-                [self decodeVp:vp];
-                break;
-        }
-    });
-#else
     VideoPacket *vp = [[VideoPacket alloc] initWithSize:data.length];
     memcpy(vp.buffer, data.bytes, data.length);
     
     dispatch_async(_aQueue, ^{
         [self decodeVp:vp];
     });
-#endif
 #else
     if (fileHandle != NULL)
     {
