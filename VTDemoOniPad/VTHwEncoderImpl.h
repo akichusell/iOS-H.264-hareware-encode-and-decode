@@ -18,7 +18,7 @@
 @interface VTHwEncoderImpl : NSObject 
 
 - (void) initWithConfiguration;
-- (void) initEncode:(int)width  height:(int)height;
+- (void) initEncode:(int)width height:(int)height hevc:(BOOL)useHEVC;
 - (void) encode:(CMSampleBufferRef )sampleBuffer; 
 - (void) End;
 

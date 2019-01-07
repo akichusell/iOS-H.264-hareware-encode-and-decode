@@ -11,6 +11,10 @@
 @import VideoToolbox;
 @import AVFoundation;
 
+@interface VTHwEncoderImpl()
+@property (nonatomic) BOOL useHEVC;
+@end
+
 @implementation VTHwEncoderImpl
 {
     VTCompressionSessionRef EncodingSession;
@@ -20,7 +24,6 @@
     BOOL initialized;
     int  frameCount;
 }
-@synthesize error;
 
 - (void) initWithConfiguration
 {
@@ -30,6 +33,7 @@
     frameCount = 0;
     
     _psList = NULL;
+    _useHEVC = NO;
 }
 
 void didCompressCallback(void *outputCallbackRefCon, void *sourceFrameRefCon, OSStatus status, VTEncodeInfoFlags infoFlags, CMSampleBufferRef sampleBuffer)
@@ -51,34 +55,34 @@ void didCompressCallback(void *outputCallbackRefCon, void *sourceFrameRefCon, OS
         NSMutableArray<NSData*>* pslist = [NSMutableArray array];
         size_t spsSize, count;
         const uint8_t *sps;
-#if USE_HEVC
-        CMVideoFormatDescriptionGetHEVCParameterSetAtIndex(format, 0, &sps, &spsSize, &count, 0);
-        [pslist addObject:[NSData dataWithBytes:sps
-                                         length:spsSize]];
-        for (int i=1; i<count; i++) {
-            size_t size;
-            const uint8_t *pps;
-            CMVideoFormatDescriptionGetHEVCParameterSetAtIndex(format, i, &pps, &size, NULL, 0);
-            [pslist addObject:[NSData dataWithBytes:pps
-                                              length:size]];
+        if (encoder.useHEVC) {
+            CMVideoFormatDescriptionGetHEVCParameterSetAtIndex(format, 0, &sps, &spsSize, &count, 0);
+            [pslist addObject:[NSData dataWithBytes:sps
+                                             length:spsSize]];
+            for (int i=1; i<count; i++) {
+                size_t size;
+                const uint8_t *pps;
+                CMVideoFormatDescriptionGetHEVCParameterSetAtIndex(format, i, &pps, &size, NULL, 0);
+                [pslist addObject:[NSData dataWithBytes:pps
+                                                  length:size]];
+            }
+            encoder.psList = pslist;
+        } else {
+            CMVideoFormatDescriptionGetH264ParameterSetAtIndex(format, 0, &sps, &spsSize, &count, 0);
+            [pslist addObject:[NSData dataWithBytes:sps
+                                             length:spsSize]];
+            for (int i=1; i<count; i++) {
+                size_t size;
+                const uint8_t *pps;
+                CMVideoFormatDescriptionGetH264ParameterSetAtIndex(format, i, &pps, &size, NULL, 0);
+                [pslist addObject:[NSData dataWithBytes:pps
+                                                 length:size]];
+            }
+            encoder.psList = pslist;
+            if (encoder.delegate) {
+                [encoder.delegate gotPsList:encoder.psList];
+            }
         }
-        encoder.psList = pslist;
-#else
-        CMVideoFormatDescriptionGetH264ParameterSetAtIndex(format, 0, &sps, &spsSize, &count, 0);
-        [pslist addObject:[NSData dataWithBytes:sps
-                                         length:spsSize]];
-        for (int i=1; i<count; i++) {
-            size_t size;
-            const uint8_t *pps;
-            CMVideoFormatDescriptionGetH264ParameterSetAtIndex(format, i, &pps, &size, NULL, 0);
-            [pslist addObject:[NSData dataWithBytes:pps
-                                             length:size]];
-        }
-        encoder.psList = pslist;
-        if (encoder.delegate) {
-            [encoder.delegate gotPsList:encoder.psList];
-        }
-#endif
     }
     
     CMBlockBufferRef dataBuffer = CMSampleBufferGetDataBuffer(sampleBuffer);
@@ -91,30 +95,27 @@ void didCompressCallback(void *outputCallbackRefCon, void *sourceFrameRefCon, OS
     }
 }
 
-- (void) initEncode:(int)width  height:(int)height {
+- (void) initEncode:(int)width height:(int)height hevc:(BOOL)useHEVC {
     dispatch_sync(aQueue, ^{
-        [self internalInitEncode:width height:height];
+        [self internalInitEncode:width height:height hevc:useHEVC];
+        self.useHEVC = useHEVC;
     });
 }
 
-- (void) internalInitEncode:(int)width  height:(int)height {
+- (void) internalInitEncode:(int)width  height:(int)height hevc:(BOOL)useHEVC {
     CFMutableDictionaryRef sessionAttributes = CFDictionaryCreateMutable(
                                                                          NULL,
                                                                          0,
                                                                          &kCFTypeDictionaryKeyCallBacks,
                                                                          &kCFTypeDictionaryValueCallBacks);
-#if USE_HEVC
-    CMVideoCodecType type = kCMVideoCodecType_HEVC;
-#else
-    CMVideoCodecType type = kCMVideoCodecType_H264;
-#endif
+    
+    CMVideoCodecType type = (useHEVC)? kCMVideoCodecType_HEVC : kCMVideoCodecType_H264;
     OSStatus status = VTCompressionSessionCreate(NULL, width, height, type, sessionAttributes, NULL, NULL, didCompressCallback, (__bridge void *)(self),  &EncodingSession);
-    NSLog(@"VTCompressionSessionCreate %d", (int)status);
-    if (status != 0)
-    {
+    if (status != 0) {
         NSLog(@"Unable to create (%@) session", @(type));
         return ;
     }
+     NSLog(@"create %@ Encoder (%d x %d)", useHEVC? @"HEVC" : @"H264", width, height);
     
     // properties
     status = VTSessionSetProperty(EncodingSession, kVTCompressionPropertyKey_RealTime, kCFBooleanTrue);
@@ -133,22 +134,22 @@ void didCompressCallback(void *outputCallbackRefCon, void *sourceFrameRefCon, OS
         NSLog(@"kVTCompressionPropertyKey_MaxKeyFrameIntervalDuration error %@", @(status));
     }
     
-#if USE_HEVC
-    status = VTSessionSetProperty(EncodingSession, kVTCompressionPropertyKey_ProfileLevel, kVTProfileLevel_HEVC_Main_AutoLevel);
-    if (status != 0) {
-        NSLog(@"kVTCompressionPropertyKey_ProfileLevel error %@", @(status));
+    if (useHEVC) {
+        status = VTSessionSetProperty(EncodingSession, kVTCompressionPropertyKey_ProfileLevel, kVTProfileLevel_HEVC_Main_AutoLevel);
+        if (status != 0) {
+            NSLog(@"kVTCompressionPropertyKey_ProfileLevel error %@", @(status));
+        }
+    } else {
+        status = VTSessionSetProperty(EncodingSession, kVTCompressionPropertyKey_H264EntropyMode, kVTH264EntropyMode_CABAC);
+        if (status != 0) {
+            NSLog(@"kVTCompressionPropertyKey_H264EntropyMode error %@", @(status));
+        }
+        
+        status = VTSessionSetProperty(EncodingSession, kVTCompressionPropertyKey_ProfileLevel, kVTProfileLevel_H264_High_AutoLevel);
+        if (status != 0) {
+            NSLog(@"kVTCompressionPropertyKey_ProfileLevel error %@", @(status));
+        }
     }
-#else
-    status = VTSessionSetProperty(EncodingSession, kVTCompressionPropertyKey_H264EntropyMode, kVTH264EntropyMode_CABAC);
-    if (status != 0) {
-        NSLog(@"kVTCompressionPropertyKey_H264EntropyMode error %@", @(status));
-    }
-    
-    status = VTSessionSetProperty(EncodingSession, kVTCompressionPropertyKey_ProfileLevel, kVTProfileLevel_H264_High_AutoLevel);
-    if (status != 0) {
-        NSLog(@"kVTCompressionPropertyKey_ProfileLevel error %@", @(status));
-    }
-#endif
     
     int32_t bitrateValue = 5000 * 1024; // 5 Mbps
     status = VTSessionSetProperty(EncodingSession, kVTCompressionPropertyKey_AverageBitRate, CFNumberCreate(kCFAllocatorDefault, kCFNumberSInt32Type, &bitrateValue));
@@ -202,7 +203,6 @@ void didCompressCallback(void *outputCallbackRefCon, void *sourceFrameRefCon, OS
         VTCompressionSessionInvalidate(EncodingSession);
         CFRelease(EncodingSession);
         EncodingSession = NULL;
-        error = NULL;
         return;
     }
 //    NSLog(@"VTCompressionSessionEncodeFrame Success");
@@ -216,7 +216,6 @@ void didCompressCallback(void *outputCallbackRefCon, void *sourceFrameRefCon, OS
     VTCompressionSessionInvalidate(EncodingSession);
     CFRelease(EncodingSession);
     EncodingSession = NULL;
-    error = NULL;
 }
 
 @end

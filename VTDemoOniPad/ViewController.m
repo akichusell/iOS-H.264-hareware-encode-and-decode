@@ -20,13 +20,9 @@
     VTHwEncoderImpl *vtEncoder;
     AVCaptureSession *captureSession;
     bool startCalled;
-    AVCaptureVideoPreviewLayer *previewLayer;
     NSString *h264FileSavePath;
-    int fd;
     NSFileHandle *fileHandle;
-    AVCaptureConnection* connection;
-    AVSampleBufferDisplayLayer *sbDisplayLayer;
-    
+
     // 디코딩
     uint8_t *_sps;
     NSInteger _spsSize;
@@ -39,9 +35,26 @@
 
 @property (weak, nonatomic) IBOutlet UIButton *startStopBtn;
 @property (weak, nonatomic) IBOutlet UIButton *playerBtn;
+
+@property (weak, nonatomic) IBOutlet UIView *largeView;
+@property (weak, nonatomic) IBOutlet UIView *smallView;
+@property (weak, nonatomic) IBOutlet UIButton *smallViewBtn;
+@property (weak, nonatomic) IBOutlet UILabel *largeLabel;
+@property (weak, nonatomic) IBOutlet UILabel *smallLabel;
+@property (weak, nonatomic) IBOutlet UIButton *codecTypeBtn;
+@property (weak, nonatomic) IBOutlet UILabel *curCodecLabel;
+
+
+@property (nonatomic) BOOL useSmallView;
+
+@property (strong, nonatomic) AVCaptureVideoPreviewLayer *previewLayer;
+@property (strong, nonatomic) AVSampleBufferDisplayLayer *sbDisplayLayer;
+
 #if DIRECT_DECODE
 @property (nonatomic) dispatch_queue_t aQueue;
 #endif
+
+@property (nonatomic) BOOL useHEVC;
 
 @end
 
@@ -73,12 +86,11 @@ static void didDecompress( void *decompressionOutputRefCon, void *sourceFrameRef
     [vtEncoder initWithConfiguration];
     startCalled = true;
     playCalled = true;
+    _useSmallView = NO;
+    _useHEVC = NO;
+    _curCodecLabel.text = @"";
 #if DIRECT_DECODE
     _aQueue = dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0);
-#endif
-    
-#if USE_HEVC
-    NSLog(@"use hevc");
 #endif
     
     // 파일 저장 위치
@@ -88,6 +100,105 @@ static void didDecompress( void *decompressionOutputRefCon, void *sourceFrameRef
     h264FileSavePath = [documentsDirectory stringByAppendingPathComponent:@"test.h264"];
     [fileManager removeItemAtPath:h264FileSavePath error:nil];
     [fileManager createFileAtPath:h264FileSavePath contents:nil attributes:nil];
+}
+
+- (void)moveDecodeViewToTargetView:(UIView*)targetView {
+    if (!_glLayer) {
+        float width = targetView.frame.size.width;
+        float height = width * 16.f/9.f;
+        _glLayer = [[AAPLEAGLLayer alloc] initWithFrame:CGRectMake(0, 0, width, height)];
+    }
+
+    [_glLayer removeFromSuperlayer];
+    
+    float width = targetView.frame.size.width;
+    float height = width * 16.f/9.f;
+    _glLayer.frame = CGRectMake(0, 0, width, height);
+
+    [targetView.layer addSublayer:_glLayer];
+}
+
+- (void)movePreviewViewToTargetView:(UIView*)targetView {
+    if (!_sbDisplayLayer) {
+        _sbDisplayLayer = [[AVSampleBufferDisplayLayer alloc]init];
+        _sbDisplayLayer.backgroundColor = [UIColor blackColor].CGColor;
+        _sbDisplayLayer.videoGravity = AVLayerVideoGravityResizeAspect;
+    }
+    
+    [_sbDisplayLayer removeFromSuperlayer];
+    
+    float width = targetView.frame.size.width;
+    float height = width * 16.f/9.f;
+    _sbDisplayLayer.frame = CGRectMake(0, 0, width, height);
+    
+    [targetView.layer addSublayer:_sbDisplayLayer];
+}
+
+// MARK: - Actions
+
+- (IBAction)playerAction:(id)sender {
+#if DIRECT_DECODE
+#else
+    if (playCalled) {
+        playCalled = false;
+        [_playerBtn setTitle:@"close" forState:UIControlStateNormal];
+        
+        [self createDecodedView];
+        
+        dispatch_async(dispatch_get_global_queue(0, 0), ^{
+            [self decodeFile:@"test" fileExt:@"h264"];
+        });
+    } else {
+        playCalled = true;
+        [_playerBtn setTitle:@"play" forState:UIControlStateNormal];
+        [self clearH264Deocder];
+        [_glLayer removeFromSuperlayer];
+    }
+#endif
+}
+
+// Called when start/stop button is pressed
+- (IBAction) StartStopAction:(id)sender {
+    _codecTypeBtn.hidden = startCalled;
+    _curCodecLabel.text = _useHEVC? @"HEVC" : @"H264";
+    _curCodecLabel.hidden = !startCalled;
+    
+    if (startCalled) {
+        [self startEncode];
+        startCalled = false;
+        [_startStopBtn setTitle:@"Stop" forState:UIControlStateNormal];
+    } else {
+        [_startStopBtn setTitle:@"Start" forState:UIControlStateNormal];
+        startCalled = true;
+        [self stopEncode];
+        [vtEncoder End];
+#if DIRECT_DECODE
+        [self clearVTDecoder];
+#endif
+        self.smallLabel.text = @"";
+        self.largeLabel.text = @"";
+    }
+}
+- (IBAction)toggleSmallBtn:(UIButton*)sender {
+    sender.selected = !(sender.selected);
+    if (sender.selected) {
+        [self moveDecodeViewToTargetView:self.smallView];
+        [self movePreviewViewToTargetView:self.largeView];
+        
+        self.smallLabel.text = @"encoded";
+        self.largeLabel.text = @"camera";
+    } else {
+        [self moveDecodeViewToTargetView:self.largeView];
+        [self movePreviewViewToTargetView:self.smallView];
+        
+        self.smallLabel.text = @"camera";
+        self.largeLabel.text = @"encoded";
+    }
+}
+
+- (IBAction)toggleCodec:(UIButton*)sender {
+    sender.selected = !(sender.selected);
+    _useHEVC = sender.selected;
 }
 
 #pragma mark - Decode
@@ -139,26 +250,28 @@ static void didDecompress( void *decompressionOutputRefCon, void *sourceFrameRef
     if(_deocderSession) {
         return YES;
     }
-#if USE_HEVC
-    const uint8_t* const parameterSetPointers[3] = { psList[0].bytes, psList[1].bytes, psList[2].bytes };
-    const size_t parameterSetSizes[3] = { psList[0].length, psList[1].length, psList[2].length };
-    OSStatus status = CMVideoFormatDescriptionCreateFromHEVCParameterSets(kCFAllocatorDefault,
-                                                                          3, //param count
-                                                                          parameterSetPointers,
-                                                                          parameterSetSizes,
-                                                                          4, //nal start code size
-                                                                          NULL,
-                                                                          &_decoderFormatDescription);
-#else
-    const uint8_t* const parameterSetPointers[2] = { psList[0].bytes, psList[1].bytes };
-    const size_t parameterSetSizes[2] = { psList[0].length, psList[1].length };
-    OSStatus status = CMVideoFormatDescriptionCreateFromH264ParameterSets(kCFAllocatorDefault,
-                                                                          2, //param count
-                                                                          parameterSetPointers,
-                                                                          parameterSetSizes,
-                                                                          4, //nal start code size
-                                                                          &_decoderFormatDescription);
-#endif
+    
+    OSStatus status = noErr;
+    if (_useHEVC) {
+        const uint8_t* const parameterSetPointers[3] = { psList[0].bytes, psList[1].bytes, psList[2].bytes };
+        const size_t parameterSetSizes[3] = { psList[0].length, psList[1].length, psList[2].length };
+        status = CMVideoFormatDescriptionCreateFromHEVCParameterSets(kCFAllocatorDefault,
+                                                                      3, //param count
+                                                                      parameterSetPointers,
+                                                                      parameterSetSizes,
+                                                                      4, //nal start code size
+                                                                      NULL,
+                                                                      &_decoderFormatDescription);
+    } else {
+        const uint8_t* const parameterSetPointers[2] = { psList[0].bytes, psList[1].bytes };
+        const size_t parameterSetSizes[2] = { psList[0].length, psList[1].length };
+        status = CMVideoFormatDescriptionCreateFromH264ParameterSets(kCFAllocatorDefault,
+                                                                      2, //param count
+                                                                      parameterSetPointers,
+                                                                      parameterSetSizes,
+                                                                      4, //nal start code size
+                                                                      &_decoderFormatDescription);
+    }
     if(status == noErr) {
         CFDictionaryRef attrs = NULL;
         const void *keys[] = { kCVPixelBufferPixelFormatTypeKey };
@@ -191,12 +304,15 @@ static void didDecompress( void *decompressionOutputRefCon, void *sourceFrameRef
     return YES;
 }
 
--(BOOL) initHEVCDecoder {
-    return NO;
+-(void)clearVTDecoder {
+    dispatch_async(_aQueue, ^{
+        [self internalClearVTDecoder];
+    });
 }
 
--(void)clearVTDeocder {
+- (void)internalClearVTDecoder {
     if(_deocderSession) {
+        VTDecompressionSessionWaitForAsynchronousFrames(_deocderSession);
         VTDecompressionSessionInvalidate(_deocderSession);
         CFRelease(_deocderSession);
         _deocderSession = NULL;
@@ -292,24 +408,6 @@ static void didDecompress( void *decompressionOutputRefCon, void *sourceFrameRef
     }
 }
 
--(void)decodeSamplebuffer:(CMSampleBufferRef)samplebuffer {
-    VTDecodeFrameFlags flags = 0;
-    VTDecodeInfoFlags flagOut = 0;
-    OSStatus decodeStatus = VTDecompressionSessionDecodeFrame(_deocderSession,
-                                                              samplebuffer,
-                                                              flags,
-                                                              (__bridge void *)self,
-                                                              &flagOut);
-    
-    if(decodeStatus == kVTInvalidSessionErr) {
-        NSLog(@"Invalid session, reset decoder session");
-    } else if(decodeStatus == kVTVideoDecoderBadDataErr) {
-        NSLog(@"decode failed status=%d(Bad data)", (int)decodeStatus);
-    } else if(decodeStatus != noErr) {
-        NSLog(@"decode failed status=%d", (int)decodeStatus);
-    }
-}
-
 -(void)decodeFile:(NSString*)fileName fileExt:(NSString*)fileExt {
     VideoFileParser *parser = [VideoFileParser alloc];
     [parser open:h264FileSavePath];
@@ -368,52 +466,9 @@ static void didDecompress( void *decompressionOutputRefCon, void *sourceFrameRef
     [parser close];
 }
 
-- (IBAction)playerAction:(id)sender {
-#if DIRECT_DECODE
-#else
-    if (playCalled) {
-        playCalled = false;
-        [_playerBtn setTitle:@"close" forState:UIControlStateNormal];
+#pragma mark - Encode
 
-        float width = self.view.frame.size.width * WIDTH_RATIO;
-        float height = width * 16.f/9.f;
-        _glLayer = [[AAPLEAGLLayer alloc] initWithFrame:CGRectMake((self.view.frame.size.width-width)/2, 20, width, height)];
-        [self.view.layer addSublayer:_glLayer];
-        
-        dispatch_async(dispatch_get_global_queue(0, 0), ^{
-            [self decodeFile:@"test" fileExt:@"h264"];
-        });
-    } else {
-        playCalled = true;
-        [_playerBtn setTitle:@"play" forState:UIControlStateNormal];
-        [self clearH264Deocder];
-        [_glLayer removeFromSuperlayer];
-    }
-#endif
-}
-
-#pragma mark - 인코딩
-// Called when start/stop button is pressed
-- (IBAction) StartStopAction:(id)sender {
-    if (startCalled)
-    {
-        [self startCamera];
-        startCalled = false;
-        [_startStopBtn setTitle:@"Stop" forState:UIControlStateNormal];
-    }
-    else
-    {
-        [_startStopBtn setTitle:@"Start" forState:UIControlStateNormal];
-        startCalled = true;
-        [self stopCamera];
-        [vtEncoder End];
-#if DIRECT_DECODE
-        [self clearVTDeocder];
-#endif
-    }
-}
-
-- (void) startCamera
+- (void) startEncode
 {
     // make input device
     NSError *deviceError;
@@ -444,87 +499,57 @@ static void didDecompress( void *decompressionOutputRefCon, void *sourceFrameRef
     [captureSession setSessionPreset:AVCaptureSessionPresetHigh];
     [captureSession setSessionPreset:[NSString stringWithString:AVCaptureSessionPreset1280x720]];
     
-    connection = [outputDevice connectionWithMediaType:AVMediaTypeVideo];
-    [self setRelativeVideoOrientation];
-    
-    NSNotificationCenter* notify = [NSNotificationCenter defaultCenter];
-    
-    [notify addObserver:self
-               selector:@selector(statusBarOrientationDidChange:)
-                   name:@"StatusBarOrientationDidChange"
-                 object:nil];
-    
+    AVCaptureConnection* connection = [outputDevice connectionWithMediaType:AVMediaTypeVideo];
+    connection.videoOrientation = AVCaptureVideoOrientationPortrait;
+
     [captureSession commitConfiguration];
     [captureSession startRunning];
     
 #if DIRECT_DECODE
-    // decoded display
-    float width = self.view.frame.size.width * WIDTH_RATIO;
-    float height = width * 16.f/9.f;
-    _glLayer = [[AAPLEAGLLayer alloc] initWithFrame:CGRectMake((self.view.frame.size.width-width)/2, 20, width, height)];
-    [self.view.layer addSublayer:_glLayer];
+    [self moveDecodeViewToTargetView:self.largeView];
+    [self movePreviewViewToTargetView:self.smallView];
+    
+    self.smallViewBtn.selected = NO;
+    self.smallLabel.text = @"camera";
+    self.largeLabel.text = @"encoded";
 #else
     // preview display
     AVSampleBufferDisplayLayer *sb = [[AVSampleBufferDisplayLayer alloc]init];
     sb.backgroundColor = [UIColor blackColor].CGColor;
-    sbDisplayLayer = sb;
+    _sbDisplayLayer = sb;
     sb.videoGravity = AVLayerVideoGravityResizeAspect;
     float width = self.view.frame.size.width * WIDTH_RATIO;
     float height = width * 16.f/9.f;
-    sbDisplayLayer.frame = CGRectMake((self.view.frame.size.width-width)/2, 20, width, height);
-    [self.view.layer addSublayer:sbDisplayLayer];
+    _sbDisplayLayer.frame = CGRectMake((self.view.frame.size.width-width)/2, 20, width, height);
+    [self.view.layer addSublayer:_sbDisplayLayer];
     
     fileHandle = [NSFileHandle fileHandleForWritingAtPath:h264FileSavePath];
 #endif
     
-    [vtEncoder initEncode:720 height:1280];
+    [vtEncoder initEncode:720.0f height:1280.0f hevc:_codecTypeBtn.selected];
     vtEncoder.delegate = self;
 }
 
-- (void) statusBarOrientationDidChange:(NSNotification*)notification {
-    [self setRelativeVideoOrientation];
-}
-
-- (void) setRelativeVideoOrientation {
-    switch ([[UIDevice currentDevice] orientation]) {
-        case UIInterfaceOrientationPortrait:
-        case UIInterfaceOrientationUnknown:
-            connection.videoOrientation = AVCaptureVideoOrientationPortrait;
-            break;
-        case UIInterfaceOrientationPortraitUpsideDown:
-            connection.videoOrientation =
-            AVCaptureVideoOrientationPortraitUpsideDown;
-            break;
-        case UIInterfaceOrientationLandscapeLeft:
-            connection.videoOrientation = AVCaptureVideoOrientationLandscapeLeft;
-            break;
-        case UIInterfaceOrientationLandscapeRight:
-            connection.videoOrientation = AVCaptureVideoOrientationLandscapeRight;
-            break;
-        default:
-            break;
-    }
-}
-
-- (void) stopCamera
+- (void) stopEncode
 {
     [captureSession stopRunning];
-    [previewLayer removeFromSuperlayer];
+    [_previewLayer removeFromSuperlayer];
 
 #if DIRECT_DECODE
     [_glLayer removeFromSuperlayer];
+    [_sbDisplayLayer removeFromSuperlayer];
 #else
     [fileHandle closeFile];
     fileHandle = NULL;
     
-    [sbDisplayLayer removeFromSuperlayer];
+    [_sbDisplayLayer removeFromSuperlayer];
 #endif
 }
 
 #pragma mark - AVCaptureVideoDataOutputSampleBufferDelegate
 
 -(void) captureOutput:(AVCaptureOutput*)captureOutput didOutputSampleBuffer:(CMSampleBufferRef)sampleBuffer fromConnection:(AVCaptureConnection*)connection {
-    [sbDisplayLayer enqueueSampleBuffer:sampleBuffer];
+    [_sbDisplayLayer enqueueSampleBuffer:sampleBuffer];
     
     [vtEncoder encode:sampleBuffer];
 }
