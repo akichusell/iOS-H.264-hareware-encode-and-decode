@@ -56,6 +56,9 @@
 
 @property (nonatomic) BOOL useHEVC;
 
+@property (nonatomic) int cameraWidth;
+@property (nonatomic) int cameraHeight;
+
 @end
 
 // decode callback
@@ -89,6 +92,8 @@ static void didDecompress( void *decompressionOutputRefCon, void *sourceFrameRef
     _useSmallView = NO;
     _useHEVC = NO;
     _curCodecLabel.text = @"";
+    _cameraWidth = 0;
+    _cameraHeight = 0;
 #if DIRECT_DECODE
     _aQueue = dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0);
 #endif
@@ -159,14 +164,21 @@ static void didDecompress( void *decompressionOutputRefCon, void *sourceFrameRef
 
 // Called when start/stop button is pressed
 - (IBAction) StartStopAction:(id)sender {
-    _codecTypeBtn.hidden = startCalled;
-    _curCodecLabel.text = _useHEVC? @"HEVC" : @"H264";
-    _curCodecLabel.hidden = !startCalled;
-    
     if (startCalled) {
-        [self startEncode];
-        startCalled = false;
-        [_startStopBtn setTitle:@"Stop" forState:UIControlStateNormal];
+        BOOL start = [self startEncode];
+        if (start) {
+            startCalled = false;
+            [_startStopBtn setTitle:@"Stop" forState:UIControlStateNormal];
+            
+            NSString* codec = _useHEVC? @"HEVC" : @"H264";
+            _curCodecLabel.text = [NSString stringWithFormat:@"%dx%d (%@)", _cameraHeight, _cameraWidth, codec];
+            _curCodecLabel.hidden = NO;
+            
+            _codecTypeBtn.hidden = YES;
+        } else {
+            _curCodecLabel.hidden = YES;
+            _codecTypeBtn.hidden = NO;
+        }
     } else {
         [_startStopBtn setTitle:@"Start" forState:UIControlStateNormal];
         startCalled = true;
@@ -177,6 +189,9 @@ static void didDecompress( void *decompressionOutputRefCon, void *sourceFrameRef
 #endif
         self.smallLabel.text = @"";
         self.largeLabel.text = @"";
+        
+        _curCodecLabel.hidden = YES;
+        _codecTypeBtn.hidden = NO;
     }
 }
 - (IBAction)toggleSmallBtn:(UIButton*)sender {
@@ -468,42 +483,13 @@ static void didDecompress( void *decompressionOutputRefCon, void *sourceFrameRef
 
 #pragma mark - Encode
 
-- (void) startEncode
-{
-    // make input device
-    NSError *deviceError;
+- (BOOL) startEncode {
+    _cameraWidth = 0;
+    _cameraHeight = 0;
     
-    AVCaptureDevice *cameraDevice = [AVCaptureDevice defaultDeviceWithMediaType:AVMediaTypeVideo];
-    
-    AVCaptureDeviceInput *inputDevice = [AVCaptureDeviceInput deviceInputWithDevice:cameraDevice error:&deviceError];
-    
-    // make output device
-    AVCaptureVideoDataOutput *outputDevice = [[AVCaptureVideoDataOutput alloc] init];
-    NSString* key = (NSString*)kCVPixelBufferPixelFormatTypeKey;
-    NSNumber* val = [NSNumber numberWithUnsignedInt:kCVPixelFormatType_420YpCbCr8BiPlanarFullRange];
-    NSDictionary* videoSettings = [NSDictionary dictionaryWithObject:val forKey:key];
-    outputDevice.videoSettings = videoSettings;
-    
-    [outputDevice setSampleBufferDelegate:self queue:dispatch_get_main_queue()];
-    
-    // initialize capture session
-    captureSession = [[AVCaptureSession alloc] init];
-    
-    [captureSession addInput:inputDevice];
-    [captureSession addOutput:outputDevice];
-    
-    // begin configuration for the AVCaptureSession
-    [captureSession beginConfiguration];
-    
-    // picture resolution
-    [captureSession setSessionPreset:AVCaptureSessionPresetHigh];
-    [captureSession setSessionPreset:[NSString stringWithString:AVCaptureSessionPreset1280x720]];
-    
-    AVCaptureConnection* connection = [outputDevice connectionWithMediaType:AVMediaTypeVideo];
-    connection.videoOrientation = AVCaptureVideoOrientationPortrait;
-
-    [captureSession commitConfiguration];
-    [captureSession startRunning];
+    if (![self startCamera]) {
+        return NO;
+    }
     
 #if DIRECT_DECODE
     [self moveDecodeViewToTargetView:self.largeView];
@@ -526,12 +512,13 @@ static void didDecompress( void *decompressionOutputRefCon, void *sourceFrameRef
     fileHandle = [NSFileHandle fileHandleForWritingAtPath:h264FileSavePath];
 #endif
     
-    [vtEncoder initEncode:720.0f height:1280.0f hevc:_codecTypeBtn.selected];
+    [vtEncoder initEncode:_cameraHeight height:_cameraWidth hevc:_codecTypeBtn.selected];
     vtEncoder.delegate = self;
+    
+    return YES;
 }
 
-- (void) stopEncode
-{
+- (void) stopEncode {
     [captureSession stopRunning];
     [_previewLayer removeFromSuperlayer];
 
@@ -544,6 +531,108 @@ static void didDecompress( void *decompressionOutputRefCon, void *sourceFrameRef
     
     [_sbDisplayLayer removeFromSuperlayer];
 #endif
+}
+
+- (BOOL) startCamera {
+    int targetWidth = 2560;
+    int targetHeight = 1440;
+    int targetFps = 24;
+    
+    NSError *deviceError;
+
+    AVCaptureDevice *cameraDevice = [AVCaptureDevice defaultDeviceWithMediaType:AVMediaTypeVideo];
+    AVCaptureDeviceInput *inputDevice = [AVCaptureDeviceInput deviceInputWithDevice:cameraDevice error:&deviceError];
+    
+    AVCaptureVideoDataOutput *outputDevice = [[AVCaptureVideoDataOutput alloc] init];
+    NSString* key = (NSString*)kCVPixelBufferPixelFormatTypeKey;
+    NSNumber* val = [NSNumber numberWithUnsignedInt:kCVPixelFormatType_420YpCbCr8BiPlanarFullRange];
+    NSDictionary* videoSettings = [NSDictionary dictionaryWithObject:val forKey:key];
+    outputDevice.videoSettings = videoSettings;
+    
+    [outputDevice setSampleBufferDelegate:self queue:dispatch_get_main_queue()];
+    
+    // initialize capture session
+    captureSession = [[AVCaptureSession alloc] init];
+    
+    [captureSession addInput:inputDevice];
+    [captureSession addOutput:outputDevice];
+    
+    // begin configuration for the AVCaptureSession
+    [captureSession beginConfiguration];
+    
+    // found device format
+    AVCaptureDeviceFormat* deviceFormat = nil;
+    const NSInteger requestedVideoFormatArea = targetWidth*targetHeight;
+    NSInteger diffNeedArea = INT_MAX;
+    
+    for (AVCaptureDeviceFormat* format in cameraDevice.formats) {
+        CMVideoDimensions dimension = CMVideoFormatDescriptionGetDimensions(format.formatDescription);
+        FourCharCode mediaSubType = CMFormatDescriptionGetMediaSubType(format.formatDescription);
+        
+        const NSInteger deviceFormatArea = dimension.width * dimension.height;
+        const NSInteger diffArea = labs(requestedVideoFormatArea - deviceFormatArea);
+        
+        if (diffArea == 0 && targetWidth == dimension.width && targetHeight == dimension.height) {
+            if (mediaSubType == kCVPixelFormatType_420YpCbCr8BiPlanarFullRange) {
+                // requestedVideoFormatArea 과 일치하고, 실제 크기도 똑같고
+                // PixelFormat도 맞으면 더 찾을 필요없음
+                deviceFormat = format;
+                break;
+            } else if (diffArea < diffNeedArea) {
+                // requestedVideoFormatArea 과 일치하고, 실제 크기도 똑같으나 PixelFormat이 다르다
+                // 사이즈 비교해서 먼저 설정된 후보군의 범위보다 작을때만 후보군 교체
+                deviceFormat = format;
+                diffNeedArea = diffArea;
+            }
+        } else if (diffArea < diffNeedArea) {
+            // requestedVideoFormatArea에 더 가까운 videoFormat값을 찾았으면, 후보군으로 등록
+            deviceFormat = format;
+            diffNeedArea = diffArea;
+        } else if (diffArea == diffNeedArea) {
+            // 기존과 동일한 video format을 찾았으면, media foramt을 보고 후보군을 교체
+            CMVideoDimensions desiredDimension = CMVideoFormatDescriptionGetDimensions(deviceFormat.formatDescription);
+            if (desiredDimension.width == dimension.width &&
+                desiredDimension.height == dimension.height &&
+                mediaSubType == kCVPixelFormatType_420YpCbCr8BiPlanarFullRange) {
+                deviceFormat = format;
+                diffNeedArea = diffArea;
+            }
+        }
+    }
+    
+    // save camera size
+    CMVideoDimensions dimension = CMVideoFormatDescriptionGetDimensions(deviceFormat.formatDescription);
+    _cameraWidth = dimension.width;
+    _cameraHeight = dimension.height;
+    NSLog(@"camera %d x %d", _cameraWidth, _cameraHeight);
+    
+    if ([cameraDevice lockForConfiguration:&deviceError]) {
+        @try {
+            cameraDevice.activeFormat = deviceFormat;
+            cameraDevice.activeVideoMinFrameDuration = CMTimeMake(1, (int32_t)targetFps);
+            cameraDevice.activeVideoMaxFrameDuration = CMTimeMake(1, (int32_t)targetFps);
+
+            if ([cameraDevice isFocusModeSupported:AVCaptureFocusModeContinuousAutoFocus]) {
+                cameraDevice.focusMode = AVCaptureFocusModeContinuousAutoFocus;
+            }
+            
+        } @catch (NSException* exception) {
+            NSLog(@"Failed to set active format!\n User info:%@", exception.userInfo);
+            return NO;
+        }
+        [cameraDevice unlockForConfiguration];
+    } else {
+        NSLog(@"Failed to lock device %@. Error: %@", inputDevice, deviceError.userInfo);
+        return NO;
+    }
+    
+    AVCaptureConnection* connection = [outputDevice connectionWithMediaType:AVMediaTypeVideo];
+    connection.videoOrientation = AVCaptureVideoOrientationPortrait;
+    
+    [captureSession commitConfiguration];
+    [captureSession startRunning];
+    
+    return YES;
 }
 
 #pragma mark - AVCaptureVideoDataOutputSampleBufferDelegate
